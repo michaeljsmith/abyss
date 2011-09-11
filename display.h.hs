@@ -64,38 +64,53 @@ formatTopStatements (x:xs) = formatTopStatement x ++ "\n" ++ formatTopStatements
 
 formatTranslationUnit (TranslationUnit tu) = formatTopStatements tu
 
-class Composable a where
+class Generator a where
   vars :: a -> [VariableDeclaration]
 
-class Constructable a where
+data Object x g = Object x g
+
+class Constructible a where
   initialize :: a -> [Statement]
 
-data Int_ = Int_ Int
-integer n = Int_ n
+data Initialize a v = Initialize a v
 
-instance Composable Int_ where
+data Int_ = Int_ Int
+integer n = Object (Int_ n) (Int_ n)
+
+instance Generator Int_ where
   vars (Int_ n) = [variableDeclaration (TypeName "int") "silly"]
 
-instance Constructable Int_ where
+instance Constructible Int_ where
   initialize (Int_ n) =
     [AssignmentStatement (Identifier "silly") (IntegerLiteral n)]
 
 data Counter n = Counter n
-counter n = Counter n
+counter n = Object n (Counter n)
 
-instance (Composable n) => Composable (Counter n) where
-  vars (Counter n) = vars n
+class GeneratingObject o where
+  objectVars :: o -> [VariableDeclaration]
 
-instance (Constructable n) => Constructable (Counter n) where
-  initialize (Counter n) = initialize n
+class ConstructibleObject o where
+  objectInitialize :: o -> [Statement]
+
+instance (Generator o) => GeneratingObject (Object x o) where
+  objectVars (Object x o) = vars o
+
+instance (Constructible o) => ConstructibleObject (Object x o) where
+  objectInitialize (Object x o) = initialize o
+
+instance (GeneratingObject o) => Generator (Counter o) where
+  vars (Counter o) = objectVars o
+
+instance (ConstructibleObject o) => Constructible (Counter o) where
+  initialize (Counter o) = objectInitialize o
 
 root = counter (integer 3)
-members = vars root
 
 displayTranslationUnit =
   translationUnit [
     classDeclarationStatement (classDeclaration "Display"
-      ((map memberVariableDeclaration members) ++
-       [(method (TypeName "void") "initialize" (initialize root))]))]
+      ((map memberVariableDeclaration (objectVars root)) ++
+       [(method (TypeName "void") "initialize" (objectInitialize root))]))]
 
 main = putStr $ formatTranslationUnit displayTranslationUnit
