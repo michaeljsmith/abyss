@@ -1,5 +1,5 @@
-data Expression = Identifier String | Call Expression [Expression]
-data Statement = Statement Expression
+data Expression = Identifier String | Call Expression [Expression] | IntegerLiteral Int
+data Statement = ExpressionStatement Expression | AssignmentStatement Expression Expression
 data TypeExpression = TypeName String
 data VariableDeclaration = VariableDeclaration TypeExpression String
 data Member = MethodDeclaration TypeExpression String [Statement] | MemberVariableDeclaration VariableDeclaration
@@ -11,7 +11,7 @@ int = TypeName "int"
 
 identifier string = Identifier string
 call function arguments = Call function arguments 
-statement expression = Statement expression
+expressionStatement expression = ExpressionStatement expression
 classDeclaration name members = ClassDeclaration name members
 classDeclarationStatement classDeclaration = ClassDeclarationStatement classDeclaration
 translationUnit statements = TranslationUnit statements
@@ -28,8 +28,11 @@ formatArguments (x:xs) = (formatExpression x) ++ ", " ++ (formatArguments xs)
 formatExpression (Identifier string) = string
 formatExpression (Call function arguments) =
   (formatExpression function) ++ "(" ++ (formatArguments arguments) ++ ")"
+formatExpression (IntegerLiteral n) = show n
 
-formatStatement (Statement expression) = (formatExpression expression) ++ ";"
+formatStatement (ExpressionStatement expression) = (formatExpression expression) ++ ";"
+formatStatement (AssignmentStatement lhs rhs) =
+  (formatExpression lhs) ++ " = " ++ (formatExpression rhs) ++  ";"
 
 formatStatements [] = ""
 formatStatements (x:xs) = (formatStatement x) ++ "\n" ++ (formatStatements xs)
@@ -64,11 +67,18 @@ formatTranslationUnit (TranslationUnit tu) = formatTopStatements tu
 class Composable a where
   vars :: a -> [VariableDeclaration]
 
-data IntVariable = IntVariable Int
-integer n = IntVariable n
+class Constructable a where
+  initialize :: a -> [Statement]
 
-instance Composable IntVariable where
-  vars (IntVariable n) = [variableDeclaration (TypeName "int") "silly"]
+data Int_ = Int_ Int
+integer n = Int_ n
+
+instance Composable Int_ where
+  vars (Int_ n) = [variableDeclaration (TypeName "int") "silly"]
+
+instance Constructable Int_ where
+  initialize (Int_ n) =
+    [AssignmentStatement (Identifier "silly") (IntegerLiteral n)]
 
 data Counter n = Counter n
 counter n = Counter n
@@ -76,11 +86,16 @@ counter n = Counter n
 instance (Composable n) => Composable (Counter n) where
   vars (Counter n) = vars n
 
+instance (Constructable n) => Constructable (Counter n) where
+  initialize (Counter n) = initialize n
+
 root = counter (integer 3)
 members = vars root
 
 displayTranslationUnit =
   translationUnit [
-    classDeclarationStatement (classDeclaration "Display" (map memberVariableDeclaration members))]
+    classDeclarationStatement (classDeclaration "Display"
+      ((map memberVariableDeclaration members) ++
+       [(method (TypeName "void") "initialize" (initialize root))]))]
 
 main = putStr $ formatTranslationUnit displayTranslationUnit
