@@ -61,22 +61,23 @@ formatTopStatements (x:xs) = formatTopStatement x ++ "\n" ++ formatTopStatements
 
 formatTranslationUnit (TranslationUnit tu) = formatTopStatements tu
 
-data Composite x v = Composite x v
-variableDeclarations (Composite value variables) = variables
+class Composable a where
+  vars :: a -> [VariableDeclaration]
 
-data Variable a = Variable a String
-variable type_ name = Variable type_ name
+data IntVariable = IntVariable Int
+integer n = IntVariable n
 
-data Initialized a = Initialized a Int
+instance Composable IntVariable where
+  vars (IntVariable n) = [variableDeclaration (TypeName "int") "silly"]
 
-data Integer_ = Integer_
-integer initial = Composite (Initialized Integer_ initial) (variable Integer_ "int")
+data Counter n = Counter n
+counter n = Counter n
 
-data Counter = Counter (Initialized Integer_)
-counter (Composite (Initialized Integer_ n) vars) = Composite (Counter (Initialized Integer_ n)) vars
+instance (Composable n) => Composable (Counter n) where
+  vars (Counter n) = vars n
 
 root = counter (integer 3)
-members = variableDeclarations root
+members = vars root
 
 displayTranslationUnit =
   translationUnit [
