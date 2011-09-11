@@ -19,15 +19,6 @@ method type_ name statements = MethodDeclaration type_ name statements
 variableDeclaration type_ name = VariableDeclaration type_ name
 memberVariableDeclaration declaration = MemberVariableDeclaration declaration
 
-displayTranslationUnit =
-  translationUnit [
-    classDeclarationStatement (classDeclaration "Display" [
-      memberVariableDeclaration (variableDeclaration int "x"),
-      method int "output" [
-        statement (call (identifier "foo") [
-          (identifier "bar"),
-          (identifier "baz")])]])]
-
 formatTypeExpression (TypeName string) = string
 
 formatArguments [] = ""
@@ -69,5 +60,26 @@ formatTopStatements [] = ""
 formatTopStatements (x:xs) = formatTopStatement x ++ "\n" ++ formatTopStatements xs
 
 formatTranslationUnit (TranslationUnit tu) = formatTopStatements tu
+
+data Composite x v = Composite x v
+variableDeclarations (Composite value variables) = variables
+
+data Variable a = Variable a String
+variable type_ name = Variable type_ name
+
+data Initialized a = Initialized a Int
+
+data Integer_ = Integer_
+integer initial = Composite (Initialized Integer_ initial) (variable Integer_ "int")
+
+data Counter = Counter (Initialized Integer_)
+counter (Composite (Initialized Integer_ n) vars) = Composite (Counter (Initialized Integer_ n)) vars
+
+root = counter (integer 3)
+members = variableDeclarations root
+
+displayTranslationUnit =
+  translationUnit [
+    classDeclarationStatement (classDeclaration "Display" (map memberVariableDeclaration members))]
 
 main = putStr $ formatTranslationUnit displayTranslationUnit
