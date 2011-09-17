@@ -1,21 +1,34 @@
 import Control.Monad.Writer
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Applicative
 
-data MemberAst = MemberVariable String String
+data StatementAst = VariableAst String String
+data MemberAst = MemberVariableAst String String | MemberFunctionAst String String [StatementAst]
 data ClassAst = ClassAst String [MemberAst]
 
-addAst x (ClassAst name ms) = ClassAst name (x:ms)
+class_ name = ClassAst name []
+addToClassAst x (ClassAst name ms) = ClassAst name (x:ms)
 
-prettyPrintMemberAst (MemberVariable t n) = do
+indent = do
+  indent <- ask
+  tell indent
+
+prettyPrintMemberAst (MemberVariableAst t n) = do
+  indent
   tell t
   tell " "
   tell n
   tell ";\n"
 
 prettyPrintClassAst (ClassAst n ms) = do
+  indent
   tell "class "
   tell n
   tell " {\n"
-  mapM_ prettyPrintMemberAst ms
+  local (++ "  ") (do
+    mapM_ prettyPrintMemberAst ms)
+  indent
   tell "};\n"
 
 data Class a = Class (ClassAst -> (a, ClassAst))
@@ -31,11 +44,14 @@ instance Monad Class where
 
   return k =  Class (\classAst -> (k, classAst))
 
-addMemberVariable type_ name = Class (\classAst0 -> ((), addAst (MemberVariable type_ name) classAst0))
+memberVariable type_ name = Class (\classAst0 -> ((), addToClassAst (MemberVariableAst type_ name) classAst0))
 
-class_ = do addMemberVariable "int" "hello"
-            addMemberVariable "char" "world"
+runFormatter classAst = runWriter (runReaderT (prettyPrintClassAst classAst) "")
+
+testClass = do
+  memberVariable "int" "hello"
+  memberVariable "char" "world"
 
 main = putStr text where
-  ((), text) = (runWriter (prettyPrintClassAst classAst))
-  (result, classAst) = runClass (ClassAst "asdf" []) class_
+  ((), text) = runFormatter classAst
+  (result, classAst) = runClass (class_ "asdf") testClass
