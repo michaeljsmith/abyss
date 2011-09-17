@@ -1,13 +1,22 @@
+import Control.Monad.Writer
+
 data MemberAst = MemberVariable String String
 data ClassAst = ClassAst String [MemberAst]
 
 addAst x (ClassAst name ms) = ClassAst name (x:ms)
 
-formatMemberAst (MemberVariable type_ name) =
-  type_ ++ " " ++ name ++ ";\n"
-formatClassAst (ClassAst name ms) =
-  "class " ++ name ++ " {\n" ++ memberString ++ "}\n" where
-    memberString = foldl (++) "" (map formatMemberAst ms)
+prettyPrintMemberAst (MemberVariable t n) = do
+  tell t
+  tell " "
+  tell n
+  tell ";\n"
+
+prettyPrintClassAst (ClassAst n ms) = do
+  tell "class "
+  tell n
+  tell " {\n"
+  mapM_ prettyPrintMemberAst ms
+  tell "};\n"
 
 data Class a = Class (ClassAst -> (a, ClassAst))
 
@@ -27,5 +36,6 @@ addMemberVariable type_ name = Class (\classAst0 -> ((), addAst (MemberVariable 
 class_ = do addMemberVariable "int" "hello"
             addMemberVariable "char" "world"
 
-main = putStr (formatClassAst classAst) where
+main = putStr text where
+  ((), text) = (runWriter (prettyPrintClassAst classAst))
   (result, classAst) = runClass (ClassAst "asdf" []) class_
