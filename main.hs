@@ -1,20 +1,41 @@
 {-#LANGUAGE GADTs, EmptyDataDecls #-}
 
-data Object a where
-  Prim :: a -> Object a
-  Apply :: Object (b -> a) -> Object b -> Object a
-  Dup :: Object (b -> b -> a) -> Object b -> Object a
-  Flip :: Object (b -> c -> a) -> Object c -> Object b -> Object a
-  Const :: Object a -> Object b -> Object a
-  Comp :: Object (b -> a) -> Object (c -> b) -> Object (c -> a)
+data Declaration = Declaration String String
+data TypeBuilder = TypeBuilder [String] [Declaration]
 
-eval :: Object a -> a
-eval (Prim a) = a
-eval (Apply f x) = (eval f) (eval x)
-eval (Dup f x) = (eval f) x' x' where x' = (eval x)
-eval (Flip f x y) = (eval f) (eval y) (eval x)
-eval (Const x y) = (eval x)
-eval (Comp f g) = (eval f) . (eval g)
+type Type a = TypeBuilder -> (a, TypeBuilder)
+
+fmap' :: (a -> b) -> Type a -> Type b
+fmap' f m = \st -> let (a, s) = m st in (f a, s)
+
+pure' :: a -> Type a
+pure' a = \st -> (a, st)
+
+(<@>) :: Type (a -> b) -> Type a -> Type b
+sf <@> sv = \st -> let (f, st1) = sf st
+                       (a, st2) = sv st1
+                    in (f a, st2)
+
+return' :: a -> Type a
+return' a = pure' a
+
+bind :: Type a -> (a -> Type b) -> Type b
+m `bind` f = \st -> let (a, st1) = m st
+                        (b, st2) = f a st1
+                     in (b, st2)
+
+readLabel :: Type String
+readLabel (TypeBuilder ls ds) = ((head ls), (TypeBuilder (tail ls) ds))
+
+data Variable = Variable String Int
+
+declareVariable :: Type (String -> Variable)
+declareVariable (TypeBuilder ls ds) = ((Variable s 3), (TypeBuilder ls (Declaration "int" s : ds)))
+
+variable = declareVariable <@> readLabel
+
+data Class t = Class String (Type t)
+--printClass (Class n t) =
 
 main =
   putStrLn "hello"
