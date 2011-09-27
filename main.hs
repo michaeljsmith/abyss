@@ -1,41 +1,28 @@
-{-#LANGUAGE GADTs, EmptyDataDecls #-}
+import Control.Monad.State
 
-data Declaration = Declaration String String
-data TypeBuilder = TypeBuilder [String] [Declaration]
+data RealType = NullType | RealType [String] RealType
+  deriving Show
 
-type Type a = TypeBuilder -> (a, TypeBuilder)
+type Type = RealType -> State [String] RealType
 
-fmap' :: (a -> b) -> Type a -> Type b
-fmap' f m = \st -> let (a, s) = m st in (f a, s)
+newLabel :: State [String] String
+newLabel = do
+  (label:rest) <- get
+  put rest
+  return label
 
-pure' :: a -> Type a
-pure' a = \st -> (a, st)
+variable :: Type
+variable s0 = do
+  label <- newLabel
+  return (RealType [label] s0)
 
-(<@>) :: Type (a -> b) -> Type a -> Type b
-sf <@> sv = \st -> let (f, st1) = sf st
-                       (a, st2) = sv st1
-                    in (f a, st2)
+view :: Type -> Type
+view var s0 =
+  return (RealType [] s0)
 
-return' :: a -> Type a
-return' a = pure' a
+app = view variable
 
-bind :: Type a -> (a -> Type b) -> Type b
-m `bind` f = \st -> let (a, st1) = m st
-                        (b, st2) = f a st1
-                     in (b, st2)
-
-readLabel :: Type String
-readLabel (TypeBuilder ls ds) = ((head ls), (TypeBuilder (tail ls) ds))
-
-data Variable = Variable String Int
-
-declareVariable :: Type (String -> Variable)
-declareVariable (TypeBuilder ls ds) = ((Variable s 3), (TypeBuilder ls (Declaration "int" s : ds)))
-
-variable = declareVariable <@> readLabel
-
-data Class t = Class String (Type t)
---printClass (Class n t) =
+realApp = evalState (app NullType) ["m" ++ show i | i <- [1..]]
 
 main =
-  putStrLn "hello"
+  putStrLn (show realApp)
