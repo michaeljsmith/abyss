@@ -1,26 +1,32 @@
 {-#LANGUAGE GADTs, EmptyDataDecls #-}
 
-data Reference a where
-  DirectReference :: a -> Reference a
-  BranchReference :: (Reference b) -> (Reference c) -> Reference a
+import Control.Applicative
 
 data Type a where
-  Constant :: (Reference a -> b) -> Type a
+  Constant :: a -> Type a
   Apply :: Type (b -> a) -> Type b -> Type a
 
-(<*>) :: Type (a -> b) -> Type a -> Type b
-(<*>) = Apply
+instance Functor Type where
+  fmap f g = Apply (Constant f) g
 
-data ViewElement
+instance Applicative Type where
+  pure = Constant
+  (<*>) = Apply
 
-data View a = View (Reference a) (Reference ViewElement)
-view = Constant View
+evalType :: Type a -> a
+evalType (Constant a) = a
+evalType (Apply f g) = (evalType f) (evalType g)
 
-data Variable a = Variable (Reference a)
-variable = Constant Variable
+data View x = View x deriving Show
+view = fmap View
 
-app = view <*> variable
+data Variable a = Variable a deriving Show
+variable :: a -> Type (Variable a)
+variable x = pure (Variable x)
+
+app = view (variable 3)
+
+evalApp = evalType app
 
 main =
-  putStrLn "hello"
-
+  putStrLn (show evalApp)
