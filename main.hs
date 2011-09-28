@@ -1,28 +1,26 @@
-import Control.Monad.State
+{-#LANGUAGE GADTs, EmptyDataDecls #-}
 
-data RealType = NullType | RealType [String] RealType
-  deriving Show
+data Reference a where
+  DirectReference :: a -> Reference a
+  BranchReference :: (Reference b) -> (Reference c) -> Reference a
 
-type Type = RealType -> State [String] RealType
+data Type a where
+  Constant :: (Reference a -> b) -> Type a
+  Apply :: Type (b -> a) -> Type b -> Type a
 
-newLabel :: State [String] String
-newLabel = do
-  (label:rest) <- get
-  put rest
-  return label
+(<*>) :: Type (a -> b) -> Type a -> Type b
+(<*>) = Apply
 
-variable :: Type
-variable s0 = do
-  label <- newLabel
-  return (RealType [label] s0)
+data ViewElement
 
-view :: Type -> Type
-view var s0 =
-  return (RealType [] s0)
+data View a = View (Reference a) (Reference ViewElement)
+view = Constant View
 
-app = view variable
+data Variable a = Variable (Reference a)
+variable = Constant Variable
 
-realApp = evalState (app NullType) ["m" ++ show i | i <- [1..]]
+app = view <*> variable
 
 main =
-  putStrLn (show realApp)
+  putStrLn "hello"
+
