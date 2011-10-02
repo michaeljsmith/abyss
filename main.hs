@@ -30,6 +30,9 @@ instance Settable Variable where
 statement :: Code -> Code
 statement code = code ++ ";\n"
 
+eval :: Block Code -> Block Code
+eval expr = statement <$> expr
+
 assign :: Block Variable -> Block Code -> Block Code
 assign var expr = statement <$> (setValue <$> var <*> expr)
 
@@ -56,8 +59,8 @@ foo = setValue
 
 block :: Block Code
 block =
-  (statement <$> (prompt variable)) `blockplus`
-  (assign variable readInput)
+  eval (prompt variable) `blockplus`
+  assign variable readInput
 
 (code, vars) = (runState block) ["v" ++ show i | i <- [1..]]
 
