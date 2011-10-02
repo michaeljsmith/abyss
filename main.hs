@@ -36,10 +36,8 @@ readVar (Variable name) = name
 writeVar :: Variable -> Code -> Code
 writeVar (Variable name) expr = name ++ " = " ++ expr
 
-data Prompt a = Prompt {getMessage :: a}
-
-displayPrompt :: (Gettable g) => Block (Prompt g) -> Block Code
-displayPrompt prompt = (++) <$> (pure "print(") <*> (getValue <$> (getMessage <$> prompt))
+prompt :: (Gettable g) => Block g -> Block Code
+prompt message = (++) <$> (return "print(") <*> (getValue <$> message)
 
 readInput :: Block Code
 readInput = return "read()"
@@ -47,16 +45,15 @@ readInput = return "read()"
 statement :: Code -> Code
 statement code = code ++ ";\n"
 
---app = Prompt (Variable "foo")
-
 foo :: Variable -> Code -> Code
 foo = setValue
 
-code :: Block Code
-code = (++) <$>
-  (statement <$> (displayPrompt (Prompt <$> variable))) <*>
+block :: Block Code
+block = (++) <$>
+  (statement <$> (prompt variable)) <*>
   (statement <$> (setValue <$> variable <*> readInput))
 
+(code, vars) = (runState block) ["v" ++ show i | i <- [1..]]
+
 main =
-  --putStr code
-  putStr "hello"
+  putStr code
