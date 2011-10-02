@@ -36,10 +36,10 @@ readVar (Variable name) = name
 writeVar :: Variable -> Code -> Code
 writeVar (Variable name) expr = name ++ " = " ++ expr
 
-data Prompt a = Prompt a
+data Prompt a = Prompt {getMessage :: a}
 
-displayPrompt :: (Gettable g) => Prompt g -> Code
-displayPrompt (Prompt message) = "print(" ++ (getValue message) ++ ")"
+displayPrompt :: (Gettable g) => Block (Prompt g) -> Block Code
+displayPrompt prompt = (++) <$> (pure "print(") <*> (getValue <$> (getMessage <$> prompt))
 
 readInput :: Block Code
 readInput = return "read()"
@@ -54,7 +54,7 @@ foo = setValue
 
 code :: Block Code
 code = (++) <$>
-  (statement <$> (displayPrompt <$> (Prompt <$> variable))) <*>
+  (statement <$> (displayPrompt (Prompt <$> variable))) <*>
   (statement <$> (setValue <$> variable <*> readInput))
 
 main =
