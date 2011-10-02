@@ -10,6 +10,9 @@ instance Applicative (State a) where
 type Block a = State [String] a
 type Code = String
 
+blockplus :: Block Code -> Block Code -> Block Code
+blockplus = liftA2 (++)
+
 class Gettable g where
   getValue :: g -> Code
 
@@ -24,6 +27,12 @@ instance Gettable Variable where
 instance Settable Variable where
   setValue = writeVar
 
+statement :: Code -> Code
+statement code = code ++ ";\n"
+
+assign :: Block Variable -> Block Code -> Block Code
+assign var expr = statement <$> (setValue <$> var <*> expr)
+
 variable :: Block Variable
 variable = do
   (label:labels) <- get
@@ -37,21 +46,18 @@ writeVar :: Variable -> Code -> Code
 writeVar (Variable name) expr = name ++ " = " ++ expr
 
 prompt :: (Gettable g) => Block g -> Block Code
-prompt message = (++) <$> (return "print(") <*> (getValue <$> message)
+prompt message = return "print(" `blockplus` (getValue <$> message) `blockplus` (return ")")
 
 readInput :: Block Code
 readInput = return "read()"
-
-statement :: Code -> Code
-statement code = code ++ ";\n"
 
 foo :: Variable -> Code -> Code
 foo = setValue
 
 block :: Block Code
-block = (++) <$>
-  (statement <$> (prompt variable)) <*>
-  (statement <$> (setValue <$> variable <*> readInput))
+block =
+  (statement <$> (prompt variable)) `blockplus`
+  (assign variable readInput)
 
 (code, vars) = (runState block) ["v" ++ show i | i <- [1..]]
 
