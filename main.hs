@@ -1,32 +1,62 @@
 {-#LANGUAGE GADTs, EmptyDataDecls #-}
 
 import Control.Applicative
+import Control.Monad.State
 
-data Type a where
-  Constant :: a -> Type a
-  Apply :: Type (b -> a) -> Type b -> Type a
+instance Applicative (State a) where
+  pure  = return
+  (<*>) = ap
 
-instance Functor Type where
-  fmap f g = Apply (Constant f) g
+type Block a = State [String] a
+type Code = String
 
-instance Applicative Type where
-  pure = Constant
-  (<*>) = Apply
+class Gettable g where
+  getValue :: g -> Code
 
-evalType :: Type a -> a
-evalType (Constant a) = a
-evalType (Apply f g) = (evalType f) (evalType g)
+class Settable s where
+  setValue :: s -> Code -> Code
 
-data View x = View x deriving Show
-view = fmap View
+data Variable = Variable String
 
-data Variable a = Variable a deriving Show
-variable :: a -> Type (Variable a)
-variable x = pure (Variable x)
+instance Gettable Variable where
+  getValue = readVar
 
-app = view (variable 3)
+instance Settable Variable where
+  setValue = writeVar
 
-evalApp = evalType app
+variable :: Block Variable
+variable = do
+  (label:labels) <- get
+  put labels
+  return $ Variable label
+
+readVar :: Variable -> Code
+readVar (Variable name) = name
+
+writeVar :: Variable -> Code -> Code
+writeVar (Variable name) expr = name ++ " = " ++ expr
+
+data Prompt a = Prompt a
+
+displayPrompt :: (Gettable g) => Prompt g -> Code
+displayPrompt (Prompt message) = "print(" ++ (getValue message) ++ ")"
+
+readInput :: Block Code
+readInput = return "read()"
+
+statement :: Code -> Code
+statement code = code ++ ";\n"
+
+--app = Prompt (Variable "foo")
+
+foo :: Variable -> Code -> Code
+foo = setValue
+
+code :: Block Code
+code = (++) <$>
+  (statement <$> (displayPrompt <$> (Prompt <$> variable))) <*>
+  (statement <$> (setValue <$> variable <*> readInput))
 
 main =
-  putStrLn (show evalApp)
+  --putStr code
+  putStr "hello"
