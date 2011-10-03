@@ -10,23 +10,23 @@ instance Applicative (State a) where
 type Block a = State [String] a
 type Code = Block String
 
-generateCode :: Block Code -> String
+generateCode :: Code -> String
 generateCode block =
   evalState block ["v" ++ show i | i <- [1..]]
 
-blockplus :: Block Code -> Block Code -> Block Code
+blockplus :: Code -> Code -> Code
 blockplus = liftA2 (++)
 
-code :: String -> Block Code
+code :: String -> Code
 code code = return code
 
 statement :: String -> String
 statement code = code ++ ";\n"
 
-eval :: Block Code -> Block Code
+eval :: Code -> Code
 eval expr = statement <$> expr
 
-assign :: Block Variable -> Block Code -> Block Code
+assign :: Variable -> Code -> Code
 assign var expr = statement <$> (setValue <$> var <*> expr)
 
 newtype Label = Label {getLabelString :: String}
@@ -40,36 +40,34 @@ class Gettable g where
 class Settable s where
   setValue :: s -> String -> String
 
-data Variable = Variable Label
+data Variable_ = Variable_ Label
+type Variable = Block Variable_
 
-instance Gettable Variable where
+instance Gettable Variable_ where
   getValue = readVar
 
-instance Settable Variable where
+instance Settable Variable_ where
   setValue = writeVar
 
-variable :: Block Variable
-variable = Variable <$> newLabel
+variable :: Variable
+variable = Variable_ <$> newLabel
 
-withVar :: (Block Variable -> Block a) -> Block a
+withVar :: (Variable -> Block a) -> Block a
 withVar fn = fn variable
 
-readVar :: Variable -> String
-readVar (Variable name) = getLabelString name
+readVar :: Variable_ -> String
+readVar (Variable_ name) = getLabelString name
 
-writeVar :: Variable -> String -> String
-writeVar (Variable name) expr = (getLabelString name) ++ " = " ++ expr
+writeVar :: Variable_ -> String -> String
+writeVar (Variable_ name) expr = (getLabelString name) ++ " = " ++ expr
 
-prompt :: (Gettable g) => Block g -> Block Code
+prompt :: (Gettable g) => Block g -> Code
 prompt message = code "print(" `blockplus` (getValue <$> message) `blockplus` code ")"
 
-readInput :: Block Code
+readInput :: Code
 readInput = code "read()"
 
-foo :: Variable -> String -> String
-foo = setValue
-
-appBlock :: Block Code
+appBlock :: Code
 appBlock =
   eval (prompt variable) `blockplus`
   assign variable readInput
