@@ -40,16 +40,18 @@ class Gettable g where
 class Settable s where
   setValue :: s -> Code -> Code
 
-data Variable_ = Variable_ Label
+data Variable_ = Variable_ {getVarName_ :: Label}
 type Variable = Block Variable_
+
+getVarName :: Variable -> Block Label
+getVarName var = getVarName_ <$> var
 
 instance Gettable Variable where
   getValue = liftA readVar where
     readVar (Variable_ name) = getLabelString name
 
 instance Settable Variable where
-  setValue = liftA2 writeVar where
-    writeVar (Variable_ name) expr = (getLabelString name) ++ " = " ++ expr
+  setValue var expr = (getLabelString <$> (getVarName var)) `blockplus` code " = " `blockplus` expr
 
 variable :: Variable
 variable = Variable_ <$> newLabel
