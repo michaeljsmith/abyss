@@ -8,34 +8,19 @@ instance Applicative (State a) where
   (<*>) = ap
 
 type Block a = State [String] a
-type Code = String
+type Code = Block String
 
-generateCode :: Block Code -> Code
+generateCode :: Block Code -> String
 generateCode block =
   evalState block ["v" ++ show i | i <- [1..]]
 
 blockplus :: Block Code -> Block Code -> Block Code
 blockplus = liftA2 (++)
 
-class Gettable g where
-  getValue :: g -> Code
-
-class Settable s where
-  setValue :: s -> Code -> Code
-
-newtype Label = Label {getLabelString :: String}
-data Variable = Variable Label
-
-instance Gettable Variable where
-  getValue = readVar
-
-instance Settable Variable where
-  setValue = writeVar
-
-code :: Code -> Block Code
+code :: String -> Block Code
 code code = return code
 
-statement :: Code -> Code
+statement :: String -> String
 statement code = code ++ ";\n"
 
 eval :: Block Code -> Block Code
@@ -44,16 +29,35 @@ eval expr = statement <$> expr
 assign :: Block Variable -> Block Code -> Block Code
 assign var expr = statement <$> (setValue <$> var <*> expr)
 
+newtype Label = Label {getLabelString :: String}
+
 newLabel :: Block Label
-newLabel = (Label . head) <$> (get <* (modify tail))
+newLabel = Label <$> (gets head <* (modify tail))
+
+class Gettable g where
+  getValue :: g -> String
+
+class Settable s where
+  setValue :: s -> String -> String
+
+data Variable = Variable Label
+
+instance Gettable Variable where
+  getValue = readVar
+
+instance Settable Variable where
+  setValue = writeVar
 
 variable :: Block Variable
 variable = Variable <$> newLabel
 
-readVar :: Variable -> Code
+withVar :: (Block Variable -> Block a) -> Block a
+withVar fn = fn variable
+
+readVar :: Variable -> String
 readVar (Variable name) = getLabelString name
 
-writeVar :: Variable -> Code -> Code
+writeVar :: Variable -> String -> String
 writeVar (Variable name) expr = (getLabelString name) ++ " = " ++ expr
 
 prompt :: (Gettable g) => Block g -> Block Code
@@ -62,7 +66,7 @@ prompt message = code "print(" `blockplus` (getValue <$> message) `blockplus` co
 readInput :: Block Code
 readInput = code "read()"
 
-foo :: Variable -> Code -> Code
+foo :: Variable -> String -> String
 foo = setValue
 
 appBlock :: Block Code
