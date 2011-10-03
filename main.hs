@@ -36,6 +36,25 @@ newtype Label = Label {getLabelString :: String}
 newLabel :: Block Label
 newLabel = Label <$> (gets head <* (modify tail))
 
+data FunctionDeclarationBuilder a = FunctionDeclarationBuilder a Code
+
+parameter :: Variable
+parameter = Variable_ <$> newLabel
+
+declareParam :: Variable -> Code
+declareParam var = getValue var
+
+addParameter :: FunctionDeclarationBuilder (Variable -> b) -> Variable -> FunctionDeclarationBuilder b
+addParameter (FunctionDeclarationBuilder body vars) var =
+  FunctionDeclarationBuilder (body var) (vars `mappend` declareParam var)
+
+signature :: a -> FunctionDeclarationBuilder a
+signature a = FunctionDeclarationBuilder a (code "")
+
+function :: FunctionDeclarationBuilder Code -> Code
+function (FunctionDeclarationBuilder body decls) =
+  code "function (" `mappend` decls `mappend` code ")\n{\n" `mappend` body `mappend` code "}\n"
+
 class Gettable g where
   getValue :: g -> Code
 
@@ -63,12 +82,15 @@ prompt message = code "print(" `mappend` (getValue message) `mappend` code ")"
 readInput :: Code
 readInput = code "read()"
 
-appBlock :: Code
-appBlock =
-  eval (prompt variable) `mappend`
-  assign variable readInput
+appBlock :: Variable -> Code
+appBlock prm =
+  eval (prompt prm) `mappend`
+  assign prm readInput
 
-appCode = generateCode appBlock
+fun :: Code
+fun = function (signature appBlock `addParameter` parameter)
+
+appCode = generateCode fun
 
 main =
   putStr appCode
