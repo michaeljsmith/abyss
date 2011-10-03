@@ -1,4 +1,4 @@
-{-#LANGUAGE GADTs, EmptyDataDecls #-}
+{-#LANGUAGE GADTs, EmptyDataDecls, TypeSynonymInstances #-}
 
 import Control.Applicative
 import Control.Monad.State
@@ -27,7 +27,7 @@ eval :: Code -> Code
 eval expr = statement <$> expr
 
 assign :: Variable -> Code -> Code
-assign var expr = statement <$> (setValue <$> var <*> expr)
+assign var expr = statement <$> (setValue var expr)
 
 newtype Label = Label {getLabelString :: String}
 
@@ -35,19 +35,21 @@ newLabel :: Block Label
 newLabel = Label <$> (gets head <* (modify tail))
 
 class Gettable g where
-  getValue :: g -> String
+  getValue :: g -> Code
 
 class Settable s where
-  setValue :: s -> String -> String
+  setValue :: s -> Code -> Code
 
 data Variable_ = Variable_ Label
 type Variable = Block Variable_
 
-instance Gettable Variable_ where
-  getValue = readVar
+instance Gettable Variable where
+  getValue = liftA readVar where
+    readVar (Variable_ name) = getLabelString name
 
-instance Settable Variable_ where
-  setValue = writeVar
+instance Settable Variable where
+  setValue = liftA2 writeVar where
+    writeVar (Variable_ name) expr = (getLabelString name) ++ " = " ++ expr
 
 variable :: Variable
 variable = Variable_ <$> newLabel
@@ -55,14 +57,8 @@ variable = Variable_ <$> newLabel
 withVar :: (Variable -> Block a) -> Block a
 withVar fn = fn variable
 
-readVar :: Variable_ -> String
-readVar (Variable_ name) = getLabelString name
-
-writeVar :: Variable_ -> String -> String
-writeVar (Variable_ name) expr = (getLabelString name) ++ " = " ++ expr
-
-prompt :: (Gettable g) => Block g -> Code
-prompt message = code "print(" `blockplus` (getValue <$> message) `blockplus` code ")"
+prompt :: (Gettable g) => g -> Code
+prompt message = code "print(" `blockplus` (getValue message) `blockplus` code ")"
 
 readInput :: Code
 readInput = code "read()"
