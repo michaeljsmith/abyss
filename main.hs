@@ -1,5 +1,6 @@
 {-#LANGUAGE GADTs, EmptyDataDecls, TypeSynonymInstances #-}
 
+import Data.Monoid
 import Control.Applicative
 import Control.Monad.State
 
@@ -10,12 +11,13 @@ instance Applicative (State a) where
 type Block a = State [String] a
 type Code = Block String
 
+instance Monoid Code where
+  mappend = liftA2 (++)
+  mempty = code ""
+
 generateCode :: Code -> String
 generateCode block =
   evalState block ["v" ++ show i | i <- [1..]]
-
-blockplus :: Code -> Code -> Code
-blockplus = liftA2 (++)
 
 code :: String -> Code
 code code = return code
@@ -47,7 +49,7 @@ instance Gettable Variable where
   getValue var = getLabelString <$> (getVarName_ <$> var)
 
 instance Settable Variable where
-  setValue var expr = getValue var `blockplus` code " = " `blockplus` expr
+  setValue var expr = getValue var `mappend` code " = " `mappend` expr
 
 variable :: Variable
 variable = Variable_ <$> newLabel
@@ -56,14 +58,14 @@ withVar :: (Variable -> Block a) -> Block a
 withVar fn = fn variable
 
 prompt :: (Gettable g) => g -> Code
-prompt message = code "print(" `blockplus` (getValue message) `blockplus` code ")"
+prompt message = code "print(" `mappend` (getValue message) `mappend` code ")"
 
 readInput :: Code
 readInput = code "read()"
 
 appBlock :: Code
 appBlock =
-  eval (prompt variable) `blockplus`
+  eval (prompt variable) `mappend`
   assign variable readInput
 
 appCode = generateCode appBlock
