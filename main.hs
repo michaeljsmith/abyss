@@ -3,8 +3,13 @@
 import Data.Monoid
 import Control.Applicative
 import Control.Monad.State
+import Control.Monad.Writer
 
 instance Applicative (State a) where
+  pure  = return
+  (<*>) = ap
+
+instance Monoid a => Applicative (Writer a) where
   pure  = return
   (<*>) = ap
 
@@ -14,18 +19,19 @@ newtype Label = Label {labelString :: String}
 newLabel :: Cpp Label
 newLabel = gets head <* (modify tail)
 
-newtype Literal a = Literal a
-newtype Expression a = Expression String
-newtype Block = Block String
+newtype Expression a = Expression String deriving Show
 
-blockplus :: Block -> Block -> Block
-blockplus (Block s0) (Block s1) = Block (s0 ++ s1)
+data Show a => Literal a = Literal a
+literalExpr :: (Show a) => Literal a -> Expression a
+literalExpr (Literal a) = Expression (show a)
 
-withVar :: Literal a -> Cpp (Expression a -> Block) -> Cpp Block
-withVar (Literal x) blockTpl =
-  (\f x -> Block ("var " ++ x ++ "\n") `blockplus` f x) <$>
-    (pure (.) <*> blockTpl <*> pure Expression) <*>
-    (labelString <$> newLabel)
+type Block a = Writer String a
+
+withVar :: (Show a) => Literal a -> Cpp (Block (Expression a -> b) -> Block b)
+withVar x = (withVarBlock x) <$> newLabel where
+  withVarBlock :: (Show a) => Literal a -> Label -> Block (Expression a -> b) -> Block b
+  withVarBlock x label tpl =
+    tell ("var " ++ (labelString label) ++ " = " ++ ((show . literalExpr) x)) *> (tpl <*> pure (Expression (labelString label)))
 
 main =
   putStrLn "hello"
