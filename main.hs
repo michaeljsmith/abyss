@@ -3,23 +3,50 @@
 import Data.Monoid
 import Control.Applicative
 import Control.Monad.State
+import Control.Monad.Writer
 
-instance Applicative (State a) where
-  pure  = return
-  (<*>) = ap
+newtype Expression a = Expression {expressionString :: String}
 
---local :: Block (Expression a -> (a -> b) -> b)
---local = pure (.) <*> (bsplit <*> newLabel <*>
---  pure (\x -> code ("var " ++ labelText x ++ "\n")))
+type Block a = StateT [String] (Writer String) a
 
-dup :: (a -> a -> b) -> a -> b
-dup f x = f x x
+blockText :: Block a -> String
+blockText block = execWriter $ runStateT block labels
+  where
+    labels = ["l" ++ show x | x <- [1..]]
 
-fdup :: Applicative f => f ((a -> a -> b) -> a -> b)
-fdup = pure dup
+newLabel :: Block String
+newLabel = do {x <- gets head; modify tail; return x}
 
-finter :: Applicative f => f ((a -> b) -> a -> a)
-finter = pure (.) <*> fdup <*> (pure (.) <*> pure (const id))
+code :: String -> Block ()
+code s = tell s
 
-main =
-  putStrLn "hello"
+variableRef :: String -> Expression a
+variableRef name = Expression name
+
+variableDecl :: String -> Block (Expression a)
+variableDecl name = do
+  code ("var " ++ name ++ ";\n")
+  return $ Expression name
+
+local :: (Expression a -> Block b) -> Block b
+local tpl = do
+  label <- newLabel
+  variableDecl label
+  tpl (variableRef label)
+
+function :: String -> Block a -> Block ()
+function name body = do
+  code $ "fun " ++ name ++ "{\n"
+  body
+  code $ "}\n"
+
+block = do
+  function "main" $
+    local $ \v -> do
+      code $ expressionString v ++ "\n"
+      variableDecl "bar"
+
+text = blockText block
+
+main = do
+  putStrLn text
