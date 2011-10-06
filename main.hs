@@ -18,10 +18,8 @@ dup f x = f x x
 fdup :: Applicative f => f ((a -> a -> b) -> a -> b)
 fdup = pure dup
 
---finter :: Applicative f => f ((a -> b) -> a -> a)
---finter :: Applicative f => f (a -> b) -> f a -> f a
-finter :: Applicative f => f (a -> b) -> f (a -> a)
-finter f = fdup <*> (pure (.) <*> pure (const id) <*> f)
+finter :: Applicative f => f ((a -> b) -> a -> a)
+finter = pure (.) <*> fdup <*> (pure (.) <*> pure (const id))
 
 main =
   putStrLn "hello"
