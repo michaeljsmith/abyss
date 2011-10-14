@@ -5,7 +5,7 @@ import Control.Applicative
 newtype Code a = Code {runCode :: String -> (a, String)}
 
 instance Functor Code where
-	fmap f x = Code $ \st -> let (a, s) = runCode x st in (f a, s)
+  fmap f x = Code $ \st -> let (a, s) = runCode x st in (f a, s)
 
 instance Applicative Code where
   pure x = Code $ \s -> (x, s)
@@ -25,13 +25,13 @@ execCode c = snd $ runCode c ""
 scope :: Code a -> Code ()
 scope body = code "{\n" *> body *> code "\n}\n" 
 
-newtype Function f = Function {runFunc :: (f, Code ())}
-funDecl = snd . runFunc
-funInvoke = fst . runFunc
+data Function f = Function {funInvoke :: f, funDecl :: Code ()}
 
-function type_ name (invoke, body) = Function (code (name ++ "(") *> invoke *> code ")", typeCode type_ *> code " " *> code name *> body)
+function type_ name (invoke, body) = Function
+  (code (name ++ "(") *> invoke *> code ")")
+  (code "\n" *> typeCode type_ *> code " " *> code (name ++ "(") *> body)
 
-body type_ block = (pure type_, scope block)
+body type_ block = (pure type_, code ") " *> scope block)
 
 data Int_ = Int_
 int = Int_
