@@ -1,58 +1,47 @@
-{-#LANGUAGE GADTs, EmptyDataDecls, TypeSynonymInstances, TypeOperators #-}
+{-#LANGUAGE GADTs, EmptyDataDecls, TypeSynonymInstances, TypeOperators, StandaloneDeriving, FlexibleContexts #-}
 
 import Control.Applicative
+import Data.Typeable
 
-newtype Code a = Code {runCode :: String -> (a, String)}
+data Expr a where
+  Cnst :: a -> Expr a
+  Var :: Integer -> TypeRep -> Expr a
+  (:*:) :: Expr (a -> b) -> Expr a -> Expr b
+  Lmb :: Integer -> Expr a -> Expr (b -> a)
 
-instance Functor Code where
-  fmap f x = Code $ \st -> let (a, s) = runCode x st in (f a, s)
+data Term a where
+  Term :: a -> Term a
+  S :: Term ((x -> a -> b) -> (x -> a) -> x -> b)
+  K :: Term (a -> b -> a)
+  (:*) :: Term (a -> b) -> Term a -> Term b
 
-instance Applicative Code where
-  pure x = Code $ \s -> (x, s)
-  sf <*> sv = Code (\st -> let (f, st1) = runCode sf st
-                               (a, st2) = runCode sv st1
-                           in (f a, st2))
+instance Show (Term a) where
+  show (Term a) = "<const>"
+  show S = "S"
+  show K = "K"
+  show (f :* g) = show f ++ " " ++ show g
 
-class Type t where
-  typeCode :: t -> Code ()
+s = S
+k = K
+i = S :* K :* K
 
-code :: String -> Code ()
-code s = Code $ \s0 -> ((), s0 ++ s)
+elim :: Expr a -> Maybe (Term a)
+elim (Cnst x) = Just (Term x)
+elim (f :*: x) = (:*) <$> elim f <*> elim x
+--elim (Lmb m (Var n)) = if m == n then Just i else Nothing
+elim (Lmb n x) = (:*) <$> pure K <*> elim x
 
-execCode :: Code a -> String
-execCode c = snd $ runCode c ""
+--T[Î»x.E] => (K T[E]) (if x does not occur free in E)
+--T[Î»x.x] => I
+--T[Î»x.Î»y.E] => T[Î»x.T[Î»y.E]] (if x occurs free in E)
+--T[Î»x.(Eâ Eâ)] => (S T[Î»x.Eâ] T[Î»x.Eâ])
 
-scope :: Code a -> Code ()
-scope body = code "{\n" *> body *> code "\n}\n" 
+eval :: Term a -> a
+eval (Term a) = a
+eval S = \f g x -> f x (g x)
+eval K = \x y -> x
+eval (x :* y) = (eval x) (eval y)
 
-data Function f = Function {funInvoke :: f, funDecl :: Code ()}
+foo = typeOf (undefined :: Integer) == typeOf (undefined :: Integer)
 
-function type_ name (invoke, body) = Function
-  (code (name ++ "(") *> invoke *> code ")")
-  (code "\n" *> typeCode type_ *> code " " *> code (name ++ "(") *> body)
-
-body type_ block = (pure type_, code ") " *> scope block)
-
-data Int_ = Int_
-int = Int_
-
-instance Type Int_ where
-  typeCode t = code "int"
-
-fooDecl = function int "foo"$
-  body int$
-    code "return 1;"
-foo = funInvoke fooDecl
-
-barDecl = function int "bar"$
-  body int$
-    code "printf(\"%d\\n\", " *> foo *> code ");"
-bar = funInvoke barDecl
-
-program =
-  funDecl fooDecl *>
-  funDecl barDecl
-
-main = putStrLn programText
-  where
-    programText = execCode program
+main = print foo
