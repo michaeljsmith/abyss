@@ -35,14 +35,14 @@ i = S :* K :* K
 
 elim :: Expr a -> Term a
 elim (Cnst x) = Term x
+elim (Var n) = undefined
 elim (f :*: x) = elim f :* elim x
-elim (Lmb m v@(Var n)) = checked_cast (iof v)
+elim (Lmb m v@(Var n)) = if m == n then checked_cast (iof v) else undefined
   where iof :: Expr e -> Term (e -> e)
         iof v = i :: Term (e -> e)
+elim (Lmb m (Lmb n x)) = elim (Lmb m (elim (Lmb n x)))
 elim (Lmb n x) = K :* elim x
 
---T[Î»x.E] => (K T[E]) (if x does not occur free in E)
---T[Î»x.x] => I
 --T[Î»x.Î»y.E] => T[Î»x.T[Î»y.E]] (if x occurs free in E)
 --T[Î»x.(Eâ Eâ)] => (S T[Î»x.Eâ] T[Î»x.Eâ])
 
