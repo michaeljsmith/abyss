@@ -10,47 +10,41 @@ checked_cast = (flip fromDyn undefined) . toDyn
 data Expr a where
   Cnst :: a -> Expr a
   Var :: Integer -> Expr a
-  (:*:) :: (Typeable a, Typeable b) => Expr (a -> b) -> Expr a -> Expr b
+  (:*) :: Expr (a -> b) -> Expr a -> Expr b
+  S :: Expr ((x -> a -> b) -> (x -> a) -> x -> b)
+  K :: Expr (a -> b -> a)
   Lmb :: (Typeable a, Typeable b) => Integer -> Expr a -> Expr (b -> a)
   deriving Typeable
 
-data Term a where
-  Term :: a -> Term a
-  S :: Term ((x -> a -> b) -> (x -> a) -> x -> b)
-  K :: Term (a -> b -> a)
-  (:*) :: Term (a -> b) -> Term a -> Term b
-  deriving Typeable
+--data Term a where
+--  Term :: a -> Term a
+--  S :: Term ((x -> a -> b) -> (x -> a) -> x -> b)
+--  K :: Term (a -> b -> a)
+--  (:*) :: Term (a -> b) -> Term a -> Term b
+--  deriving Typeable
 
-instance Show (Term a) where
-  show (Term a) = "<const>"
-  show S = "S"
-  show K = "K"
-  show (f :* g) = show f ++ " " ++ show g
+--instance Show (Term a) where
+--  show (Term a) = "<const>"
+--  show S = "S"
+--  show K = "K"
+--  show (f :* g) = show f ++ " " ++ show g
 
-s = S
-k = K
-
-i :: Term (d -> d)
+i :: Expr (d -> d)
 i = S :* K :* K
 
-elim :: Expr a -> Term a
-elim (Cnst x) = Term x
+elim :: Expr a -> Expr a
+elim (Cnst x) = Cnst x
 elim (Var n) = undefined
-elim (f :*: x) = elim f :* elim x
+elim (f :* x) = elim f :* elim x
 elim (Lmb m v@(Var n)) = if m == n then checked_cast (iof v) else undefined
-  where iof :: Expr e -> Term (e -> e)
-        iof v = i :: Term (e -> e)
+  where iof :: forall e. Typeable e => Expr e -> Expr (e -> e)
+        iof v = i :: Expr (e -> e)
 elim (Lmb m (Lmb n x)) = elim (Lmb m (elim (Lmb n x)))
+elim (Lmb n (x :* y)) = S :* elim (Lmb n x) :* elim (Lmb n y)
 elim (Lmb n x) = K :* elim x
 
 --T[Î»x.Î»y.E] => T[Î»x.T[Î»y.E]] (if x occurs free in E)
 --T[Î»x.(Eâ Eâ)] => (S T[Î»x.Eâ] T[Î»x.Eâ])
-
-eval :: Term a -> a
-eval (Term a) = a
-eval S = \f g x -> f x (g x)
-eval K = \x y -> x
-eval (x :* y) = (eval x) (eval y)
 
 --foo = typeOf (undefined :: Integer) == typeOf (undefined :: Integer)
 
