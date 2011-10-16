@@ -10,11 +10,19 @@ checked_cast = (flip fromDyn undefined) . toDyn
 data Expr a where
   Cnst :: a -> Expr a
   Var :: Integer -> Expr a
-  (:*) :: Expr (a -> b) -> Expr a -> Expr b
-  S :: Expr ((x -> a -> b) -> (x -> a) -> x -> b)
-  K :: Expr (a -> b -> a)
+  (:*) :: (Typeable a, Typeable f) => Expr (a -> f) -> Expr a -> Expr f
+  S :: (Typeable x, Typeable a, Typeable g) => Expr ((x -> a -> g) -> (x -> a) -> x -> g)
+  K :: (Typeable a, Typeable h) => Expr (a -> h -> a)
   Lmb :: (Typeable a, Typeable b) => Integer -> Expr a -> Expr (b -> a)
   deriving Typeable
+
+instance Show (Expr a) where
+  show (Cnst a) = "<const>"
+  show (Var n) = "Var " ++ show n
+  show (f :* g) = show f ++ " " ++ show g
+  show S = "S"
+  show K = "K"
+  show (Lmb n x) = "\\" ++ show n ++ " " ++ show x
 
 --data Term a where
 --  Term :: a -> Term a
@@ -29,8 +37,8 @@ data Expr a where
 --  show K = "K"
 --  show (f :* g) = show f ++ " " ++ show g
 
-i :: Expr (d -> d)
-i = S :* K :* K
+i :: forall d. Typeable d => Expr (d -> d)
+i = S :* K :* (K :: Expr (d -> d -> d))
 
 elim :: Expr a -> Expr a
 elim (Cnst x) = Cnst x
@@ -42,10 +50,5 @@ elim (Lmb m v@(Var n)) = if m == n then checked_cast (iof v) else undefined
 elim (Lmb m (Lmb n x)) = elim (Lmb m (elim (Lmb n x)))
 elim (Lmb n (x :* y)) = S :* elim (Lmb n x) :* elim (Lmb n y)
 elim (Lmb n x) = K :* elim x
-
---T[Î»x.Î»y.E] => T[Î»x.T[Î»y.E]] (if x occurs free in E)
---T[Î»x.(Eâ Eâ)] => (S T[Î»x.Eâ] T[Î»x.Eâ])
-
---foo = typeOf (undefined :: Integer) == typeOf (undefined :: Integer)
 
 main = print "hello"
