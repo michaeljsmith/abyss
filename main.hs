@@ -1,44 +1,74 @@
-{-#LANGUAGE GADTs, EmptyDataDecls, TypeSynonymInstances, TypeOperators, StandaloneDeriving, FlexibleContexts #-}
+{-#LANGUAGE GADTs, EmptyDataDecls, TypeSynonymInstances, TypeOperators, StandaloneDeriving, FlexibleContexts, DeriveDataTypeable, ScopedTypeVariables #-}
 
+import Control.Applicative
 import Data.Typeable
-import Text.Show.Functions
+import Data.Dynamic
 
--- Lambda terms using Haskell functions to represent functionals
---
--- * We don't care about exotic terms here, and hence don't pull the recursive
---   term structure out.
--- * The `Typeable' contexts and the `Tag' variant are in preparation for
---   being able to convert to a de Bruijn representation.
---
-data Term t where
-  Tag :: Typeable t      -- for conversion to de Bruijn
-      => Int -> Term t    
-         -- environment size at defining occurrence
+checked_cast :: (Typeable a, Typeable b) => a -> b
+checked_cast = (flip fromDyn undefined) . toDyn
 
-  Con :: (Typeable t, Show t)
-      => t                       -> Term t
-  Lam :: (Typeable s, Typeable t,
-          Show s, Show t)
-      => (Term s -> Term t)      -> Term (s -> t)
-  App :: (Typeable s, Typeable t,
-          Show s, Show t)
-      => Term (s -> t) -> Term s -> Term t
+data Expr a where
+  Cnst :: a -> Expr a
+  Var :: Integer -> Expr a
+  (:*:) :: (Typeable a, Typeable b) => Expr (a -> b) -> Expr a -> Expr b
+  Lmb :: (Typeable a, Typeable b) => Integer -> Expr a -> Expr (b -> a)
+  deriving Typeable
 
-deriving instance Show (Term t)
+data Term a where
+  Term :: a -> Term a
+  S :: Term ((x -> a -> b) -> (x -> a) -> x -> b)
+  K :: Term (a -> b -> a)
+  (:*) :: Term (a -> b) -> Term a -> Term b
+  deriving Typeable
 
--- A term interpreter for closed terms
---
-intp :: Show t => Term t -> t
-intp (Tag ix)      = error "HOAS.intp: Tag is only for conversion"
-intp (Con v)       = v
-intp (Lam fun)     = intp . fun . Con
-intp (App fun arg) = (intp fun) (intp arg)
+instance Show (Term a) where
+  show (Term a) = "<const>"
+  show S = "S"
+  show K = "K"
+  show (f :* g) = show f ++ " " ++ show g
 
-foo :: (Show a, Typeable a) => Term (a -> [Char])
-foo = Lam f where
-  f x = Con (show x ++ show x)
+s = S
+k = K
 
-bar :: Term [Char]
-bar = App foo foo
+i :: Term (d -> d)
+i = S :* K :* K
+
+--elim :: Typeable a => Expr a -> Maybe (Term a)
+--elim (Lmb m (Var n)) = cast i
+
+--foo :: forall c. Typeable c => Expr c -> Maybe (Term c)
+--foo (Lmb m (Var n)) = (cast i :: Maybe (Term c))
+
+foo :: Expr c -> Maybe (Term c)
+foo (Lmb m v@(Var n)) = cast (iof v)
+  where iof :: Expr e -> Term (e -> e)
+        iof v = i :: Term (e -> e)
+
+--elim' :: Expr (Int -> Int) -> Maybe (Term (Int -> Int))
+--elim' (Lmb m (Var n)) = cast i
+
+--elim (Cnst x) = Just (Term x)
+--elim (f :*: x) = (:*) <$> elim f <*> elim x
+--elim (Lmb m (Var n)) =
+----  if m == n
+----    then
+----      checked_cast (Just i) :: Maybe (Term a)
+----    else undefined
+--      --checked_cast (Just i)
+--      cast i :: Typeable a => Maybe (Term a)
+--elim (Lmb n x) = (:*) <$> pure K <*> elim x
+
+--T[Î»x.E] => (K T[E]) (if x does not occur free in E)
+--T[Î»x.x] => I
+--T[Î»x.Î»y.E] => T[Î»x.T[Î»y.E]] (if x occurs free in E)
+--T[Î»x.(Eâ Eâ)] => (S T[Î»x.Eâ] T[Î»x.Eâ])
+
+eval :: Term a -> a
+eval (Term a) = a
+eval S = \f g x -> f x (g x)
+eval K = \x y -> x
+eval (x :* y) = (eval x) (eval y)
+
+--foo = typeOf (undefined :: Integer) == typeOf (undefined :: Integer)
 
 main = print "hello"
