@@ -33,30 +33,13 @@ k = K
 i :: Term (d -> d)
 i = S :* K :* K
 
---elim :: Typeable a => Expr a -> Maybe (Term a)
---elim (Lmb m (Var n)) = cast i
-
---foo :: forall c. Typeable c => Expr c -> Maybe (Term c)
---foo (Lmb m (Var n)) = (cast i :: Maybe (Term c))
-
-foo :: Expr c -> Maybe (Term c)
-foo (Lmb m v@(Var n)) = cast (iof v)
+elim :: Expr a -> Term a
+elim (Cnst x) = Term x
+elim (f :*: x) = elim f :* elim x
+elim (Lmb m v@(Var n)) = checked_cast (iof v)
   where iof :: Expr e -> Term (e -> e)
         iof v = i :: Term (e -> e)
-
---elim' :: Expr (Int -> Int) -> Maybe (Term (Int -> Int))
---elim' (Lmb m (Var n)) = cast i
-
---elim (Cnst x) = Just (Term x)
---elim (f :*: x) = (:*) <$> elim f <*> elim x
---elim (Lmb m (Var n)) =
-----  if m == n
-----    then
-----      checked_cast (Just i) :: Maybe (Term a)
-----    else undefined
---      --checked_cast (Just i)
---      cast i :: Typeable a => Maybe (Term a)
---elim (Lmb n x) = (:*) <$> pure K <*> elim x
+elim (Lmb n x) = K :* elim x
 
 --T[Î»x.E] => (K T[E]) (if x does not occur free in E)
 --T[Î»x.x] => I
