@@ -17,7 +17,12 @@ data Inst a where
   Pair :: Inst a -> Inst a -> Inst a
   (:*) :: (Inst a :-> Inst b) -> Inst a -> Inst b
 
-(|*|) :: (Inst a :-> Inst b) -> Inst a -> Inst b
-f |*| x = f :* x
+(|*|) :: (Applicative f) => f (a -> b) -> Inst (f a) -> f b
+f |*| Inst x = f <*> x
+f |*| Pair x y = (f |*| x) *> (f |*| y)
+--f |*| ((a :-> b) :* x) = 
+--S :: (x :-> a :-> b) -> (x :-> a) -> (x :-> b)
+--K :: a -> (x :-> a)
+--I :: (a :-> a)
 
 main = print "hello"
