@@ -18,5 +18,6 @@ data Inst a where
   (:*) :: (Inst a :-> Inst b) -> Inst a -> Inst b
 
 (|*|) :: (Inst a :-> Inst b) -> Inst a -> Inst b
+f |*| x = f :* x
 
 main = print "hello"
