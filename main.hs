@@ -4,22 +4,35 @@ import Control.Applicative
 import Data.Typeable
 import Data.Dynamic
 
-class Compound c where
-  arg :: c -> Type a
+data a :-> b where
+  (:->) :: a -> b -> (a :-> b)
+  Sbst :: (x :-> a :-> b) -> (x :-> a) -> (x :-> b)
+  Ignr :: b -> a -> (b :-> a)
 
-data Type a where
-  Prim :: a -> Type b
-  Sbst :: Type (x -> a -> b) -> Type (x -> a) -> Type (x -> b)
-  Cnst :: Type a -> Type (x -> a)
-  Appl :: Type (x -> a) -> Type x -> Type a
-  Pair :: Type a -> Type a -> Type a
-  Null :: Type a
+data Object a where
+  Object :: a -> Object a
+  (:*) :: (Object a :-> Object b) -> Object a -> Object b
+  ObjectPair :: Object a -> Object a -> Object a
 
-typeArg :: Type (x -> a) -> Type x
-typeArg (Prim x) = Prim (arg x)
-typeArg (Sbst f g) = Pair (typeArg f) (typeArg g)
-typeArg (Cnst x) = Null
-typeArg (Appl f x) = x
+infixr 1 :->
 
+type Variable = IORef String
+
+memberO s m = do
+  ref <- newIORef s
+
+--data Value a = Value {valueExpression :: a}
+--textOf (Value a) = show a
+
+--constant x = Value x
+
+--data TextDisplay = TextDisplay (Value String)
+--display (TextDisplay v) = print (textOf v)
+
+--textDisplay v = v :-> TextDisplay v
+
+--app = textDisplay (constant "Hello, world!")
+
+--main = display app
 main = print "hello"
 
