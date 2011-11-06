@@ -23,11 +23,9 @@ struct Relation
   function<O (I)> generate_output;
 };
 
-struct Void {};
-
 template <typename I, typename O>
-O apply(Relation<I, O> const& f, Relation<I, Void> const& x) {
-  return f.generate_output(x.input);
+O apply(Relation<I, O> const& f, I const& x) {
+  return f.generate_output(x);
 }
 
 template <typename T>
@@ -90,12 +88,6 @@ struct Float_
   function<void (float)> set;
 };
 typedef List<Float_> Float;
-
-Relation<Float, Void> float_(float* f) {
-  return Relation<Float, Void>(
-      Float(list(Float_(var(*f) = boost::lambda::_1))),
-      function<Void (Float)>(constant(Void())));
-}
 
 void set(Float float_, float x) {
   for_each(
@@ -188,20 +180,17 @@ int main() {
 
   glfwSetWindowSizeCallback( ReSizeGLScene );
 
-  int w = 300;
-  int h = 300;
-  if (!glfwOpenWindow(w, h, 0, 0, 0, 0, 32, 0, GLFW_WINDOW)) {
+  if (!glfwOpenWindow(300, 300, 0, 0, 0, 0, 32, 0, GLFW_WINDOW)) {
     glfwTerminate();
     exit(EXIT_FAILURE);
   }
 
-  InitGL(w, h);
+  InitGL(640, 480);
 
   SpriteData sprite_;
   Relation<Float, Sprite> sprite_rel = sprite(&sprite_);
-  float posf = 0.0f;
   Float pos = sprite_rel.input;
-  Sprite sprite = apply(sprite_rel, float_(&posf));
+  Sprite sprite = apply(sprite_rel, Float());
 
   Clock clock;
   while (running) {
