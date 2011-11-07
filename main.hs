@@ -32,10 +32,16 @@ cnst a = Relation mempty (\x -> a)
 
 type Obj a = a -> a
 
-(|#|) :: (Obj a -> b) -> Obj a -> b
-f |#| x = f x
-
 compose :: (Obj b -> Obj c) -> (Obj a -> Obj b) -> (Obj a -> Obj c)
-compose f g = \x -> f |#| (g |#| x)
+compose f g = \x -> f (g x)
+
+cnst' :: Obj a -> (Obj x -> Obj a)
+cnst' x = \y -> x
+
+sbst' :: (Obj x -> Obj a -> Obj b) -> (Obj x -> Obj a) -> (Obj x -> Obj b)
+sbst' f g x = \b ->
+  f xf (g xg) b
+    where
+      xf y = x y
 
 main = print "hello"
