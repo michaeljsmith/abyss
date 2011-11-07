@@ -14,20 +14,9 @@ using boost::lambda::constant;
 using boost::lambda::var;
 using boost::lambda::bind;
 
-template <typename I, typename O>
-struct Relation
-{
-  Relation(I const& input, function<O (I)> const& generate_output):
-    input(input), generate_output(generate_output) {}
-  I input;
-  function<O (I)> generate_output;
-};
-
-template <typename I, typename O>
-O apply(Relation<I, O> const& f, I const& x) {
-  return f.generate_output(x);
-}
-
+//------------------------------------------------------------------------------
+// List
+//------------------------------------------------------------------------------
 template <typename T>
 struct ListNode;
 
@@ -82,6 +71,26 @@ void for_each(F const& f, List<T> l) {
   }
 }
 
+//------------------------------------------------------------------------------
+// Object
+//------------------------------------------------------------------------------
+template <typename I, typename O>
+struct Relation
+{
+  Relation(I const& input, function<O (I)> const& generate_output):
+    input(input), generate_output(generate_output) {}
+  I input;
+  function<O (I)> generate_output;
+};
+
+template <typename I, typename O>
+O apply(Relation<I, O> const& f, I const& x) {
+  return f.generate_output(x);
+}
+
+//------------------------------------------------------------------------------
+// Float
+//------------------------------------------------------------------------------
 struct Float_
 {
   Float_(function<void (float)> const& set): set(set) {}
@@ -95,6 +104,9 @@ void set(Float float_, float x) {
       float_);
 }
 
+//------------------------------------------------------------------------------
+// Sprite
+//------------------------------------------------------------------------------
 struct SpriteData
 {
   SpriteData(): pos(0.0f) {}
@@ -108,6 +120,28 @@ Relation<Float, Sprite> sprite(SpriteData* sprite) {
       function<Sprite (Float)>(constant(list(sprite))));
 }
 
+void renderSprite(Sprite sprite)
+{
+  assert(!nullp(sprite));
+
+  SpriteData* sprite_ = sprite->head;
+  glLoadIdentity();
+
+  glTranslatef(sprite_->pos, 0.0f, -6.0f);
+	
+  glBegin(GL_POLYGON);
+  glColor3f(1.0f, 0.0f, 0.0f);
+  glVertex3f(0.0f, 1.0f, 0.0f);
+  glColor3f(0.0f, 1.0f, 0.0f);
+  glVertex3f(1.0f, -1.0f,  0.0f);
+  glColor3f(0.0f, 0.0f, 1.0f);
+  glVertex3f(-1.0f, -1.0f, 0.0f);
+  glEnd();
+}
+
+//------------------------------------------------------------------------------
+// GL
+//------------------------------------------------------------------------------
 void InitGL(int Width, int Height)
 {
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -138,25 +172,9 @@ void GLFWCALL ReSizeGLScene(int Width, int Height)
   glMatrixMode(GL_MODELVIEW);
 }
 
-void renderSprite(Sprite sprite)
-{
-  assert(!nullp(sprite));
-
-  SpriteData* sprite_ = sprite->head;
-  glLoadIdentity();
-
-  glTranslatef(sprite_->pos, 0.0f, -6.0f);
-	
-  glBegin(GL_POLYGON);
-  glColor3f(1.0f, 0.0f, 0.0f);
-  glVertex3f(0.0f, 1.0f, 0.0f);
-  glColor3f(0.0f, 1.0f, 0.0f);
-  glVertex3f(1.0f, -1.0f,  0.0f);
-  glColor3f(0.0f, 0.0f, 1.0f);
-  glVertex3f(-1.0f, -1.0f, 0.0f);
-  glEnd();
-}
-
+//------------------------------------------------------------------------------
+// Timing
+//------------------------------------------------------------------------------
 struct Clock {
   unsigned time;
   Clock(): time(retrieve_time()) {}
@@ -173,6 +191,9 @@ private:
   }
 };
 
+//------------------------------------------------------------------------------
+// App
+//------------------------------------------------------------------------------
 int main() {
   bool running = true;
   if (!glfwInit())
