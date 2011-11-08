@@ -30,18 +30,18 @@ sbst f g = Relation newRefs genOutput
 cnst :: Monoid x => a -> (x :-> a)
 cnst a = Relation mempty (\x -> a)
 
-type Obj a = a -> a
+data a :~> b where
+  Relation' :: (a, b -> a, b) -> (a :~> b)
 
-compose :: (Obj b -> Obj c) -> (Obj a -> Obj b) -> (Obj a -> Obj c)
-compose f g = \x -> f (g x)
+infixr 1 :~>
 
-cnst' :: Obj a -> (Obj x -> Obj a)
-cnst' x = \y -> x
+bind (Relation' f) = f
 
-sbst' :: (Obj x -> Obj a -> Obj b) -> (Obj x -> Obj a) -> (Obj x -> Obj b)
-sbst' f g x = \b ->
-  f xf (g xg) b
-    where
-      xf y = x y
+type Obj a = (a -> a)
+
+(|%|) :: (a :~> b) -> a -> Obj b
+f |%| x = 
+
+infixl 8 |%|
 
 main = print "hello"
