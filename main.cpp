@@ -15,129 +15,73 @@ using boost::lambda::var;
 using boost::lambda::bind;
 
 //------------------------------------------------------------------------------
-// List
-//------------------------------------------------------------------------------
-template <typename T>
-struct ListNode;
-
-template <typename T>
-struct List : public shared_ptr<ListNode<T> const> {
-  List() {}
-  List(ListNode<T> const* ptr): shared_ptr<ListNode<T> const>(ptr) {}
-};
-
-template <typename T>
-struct ListNode {
-  ListNode(T const& head, List<T> const& tail): head(head), tail(tail) {}
-  T head;
-  List<T> tail;
-};
-
-template <typename T>
-T head(List<T> const& l) {
-  return l->head;
-}
-
-template <typename T>
-List<T> tail(List<T> const& l) {
-  return l->tail;
-}
-
-template <typename T>
-bool nullp(List<T> const& list) {
-  return list == 0;
-}
-
-template <typename T>
-List<T> cons(T const& x0, List<T> const& tail) {
-  List<T> l(new ListNode<T>(x0, tail));
-  return l;
-}
-
-template <typename T>
-List<T> list() {
-  return List<T>(0);
-}
-
-template <typename T>
-List<T> list(T const& x0) {
-  return cons(x0, list<T>());
-}
-
-template <typename T, typename F>
-void for_each(F const& f, List<T> l) {
-  for (List<T> rest = l; !nullp(rest); rest = tail(rest)) {
-    f(head(rest));
-  }
-}
-
-//------------------------------------------------------------------------------
 // Object
 //------------------------------------------------------------------------------
-template <typename I, typename O>
-struct Relation
-{
-  Relation(I const& input, function<O (I)> const& generate_output):
-    input(input), generate_output(generate_output) {}
-  I input;
-  function<O (I)> generate_output;
+struct ReferenceVisitor {
+  virtual void visitReference(void* data) const = 0;
 };
 
-template <typename I, typename O>
-O apply(Relation<I, O> const& f, I const& x) {
-  return f.generate_output(x);
-}
-
-//------------------------------------------------------------------------------
-// Float
-//------------------------------------------------------------------------------
-struct Float_
-{
-  Float_(function<void (float)> const& set): set(set) {}
-  function<void (float)> set;
+struct Environment {
+  virtual void applyReferenceVisitor(int targetName, ReferenceVisitor const& visitor) = 0;
 };
-typedef List<Float_> Float;
 
-void set(Float float_, float x) {
-  for_each(
-      bind(bind(&Float_::set, boost::lambda::_1), x),
-      float_);
-}
+template <typename T>
+struct Reference {
+  Environment* environment;
+  int name;
+  Reference(Environment* environment, int name): environment(environment), name(name) {}
+};
+
+struct Object {
+  virtual void applyReferenceVisitor(Environment* environment, int targetName, ReferenceVisitor const& visitor) = 0;
+};
+
+//------------------------------------------------------------------------------
+// Primitive
+//------------------------------------------------------------------------------
+template <typename T>
+struct Primitive : public Object {
+  virtual void applyReferenceVisitor(Environment* environment, int targetName, ReferenceVisitor const& visitor) {
+  }
+};
+
+//------------------------------------------------------------------------------
+// Composite
+//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 // Sprite
 //------------------------------------------------------------------------------
-struct SpriteData
-{
-  SpriteData(): pos(0.0f) {}
-  float pos;
+struct Sprite {
+  struct Data {
+    Data(): position(0.0f) {}
+    float position;
+  };
+
+  Data& data;
+  Reference<float> position;
+
+  Sprite(Data& data, Reference<float> position): data(data), position(position) {}
 };
-typedef List<SpriteData*> Sprite;
 
-Relation<Float, Sprite> sprite(SpriteData* sprite) {
-  return Relation<Float, Sprite>(
-      Float(list(Float_(var(sprite->pos) = boost::lambda::_1))),
-      function<Sprite (Float)>(constant(list(sprite))));
-}
-
-void renderSprite(Sprite sprite)
-{
-  assert(!nullp(sprite));
-
-  SpriteData* sprite_ = sprite->head;
-  glLoadIdentity();
-
-  glTranslatef(sprite_->pos, 0.0f, -6.0f);
-	
-  glBegin(GL_POLYGON);
-  glColor3f(1.0f, 0.0f, 0.0f);
-  glVertex3f(0.0f, 1.0f, 0.0f);
-  glColor3f(0.0f, 1.0f, 0.0f);
-  glVertex3f(1.0f, -1.0f,  0.0f);
-  glColor3f(0.0f, 0.0f, 1.0f);
-  glVertex3f(-1.0f, -1.0f, 0.0f);
-  glEnd();
-}
+//void renderSprite(Sprite sprite)
+//{
+//  assert(!nullp(sprite));
+//
+//  SpriteData* sprite_ = sprite->head;
+//  glLoadIdentity();
+//
+//  glTranslatef(sprite_->pos, 0.0f, -6.0f);
+//	
+//  glBegin(GL_POLYGON);
+//  glColor3f(1.0f, 0.0f, 0.0f);
+//  glVertex3f(0.0f, 1.0f, 0.0f);
+//  glColor3f(0.0f, 1.0f, 0.0f);
+//  glVertex3f(1.0f, -1.0f,  0.0f);
+//  glColor3f(0.0f, 0.0f, 1.0f);
+//  glVertex3f(-1.0f, -1.0f, 0.0f);
+//  glEnd();
+//}
 
 //------------------------------------------------------------------------------
 // GL
@@ -208,18 +152,18 @@ int main() {
 
   InitGL(640, 480);
 
-  SpriteData sprite_;
-  Relation<Float, Sprite> sprite_rel = sprite(&sprite_);
-  Float pos = sprite_rel.input;
-  Sprite sprite = apply(sprite_rel, Float());
+  //SpriteData sprite_;
+  //Relation<Float, Sprite> sprite_rel = sprite(&sprite_);
+  //Float pos = sprite_rel.input;
+  //Sprite sprite = apply(sprite_rel, Float());
 
   Clock clock;
   while (running) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    set(pos, clock.get() * 0.001f);
-    renderSprite(sprite);
+    //set(pos, clock.get() * 0.001f);
+    //renderSprite(sprite);
 
     glfwSwapBuffers();
     running =
