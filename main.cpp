@@ -7,120 +7,59 @@
 #include <boost/lambda/lambda.hpp>
 #include <boost/lambda/bind.hpp>
 #include <sys/time.h>
+#include <map>
 
 using boost::function;
 using boost::shared_ptr;
 using boost::lambda::constant;
 using boost::lambda::var;
 using boost::lambda::bind;
-
-//------------------------------------------------------------------------------
-// Object
-//------------------------------------------------------------------------------
-struct ReferenceVisitor {
-  virtual void visitReference(void* object) const = 0;
-};
-
-template <typename X, typename T>
-struct FunctionReferenceVisitor : public ReferenceVisitor {
-  function<X (T)> const & fn;
-  FunctionReferenceVisitor(function<X (T)> const& fn): fn(fn) {}
-
-  virtual void visitReference(void* object) const {
-    T* typedObject = static_cast<T*>(object);
-    this->fn(*typedObject);
-  }
-};
-
-struct Environment {
-  virtual void applyReferenceVisitor(int targetName, ReferenceVisitor const& visitor) = 0;
-};
-
-template <typename T>
-struct Reference {
-  Environment* environment;
-  int name;
-  Reference(Environment* environment, int name): environment(environment), name(name) {}
-};
-
-template <typename T>
-struct Object {
-  virtual int getName() const = 0;
-  virtual void applyReferenceVisitor(Environment* environment, int targetName, ReferenceVisitor const& visitor) = 0;
-};
-
-//------------------------------------------------------------------------------
-// Primitive
-//------------------------------------------------------------------------------
-template <typename T>
-struct Primitive : public Object<T> {
-  int name;
-  function<T (Environment*)> constructor;
-
-  Primitive(int name, function<T (Environment*)> const& constructor): name(name), constructor(constructor) {}
-
-  virtual int getName() const {
-    return this->name;
-  }
-
-  virtual void applyReferenceVisitor(Environment* environment, int targetName, ReferenceVisitor const& visitor) {
-    if (this->name == targetName) {
-      T object = this->constructor(environment);
-      visitor.visitReference(&object);
-    }
-  }
-};
-
-template <typename F> struct PrimitiveConstructor {};
-
-template <typename T>
-struct PrimitiveConstructor<T ()> {
-  typedef typename T::Data Data;
-  Data& data;
-  int name0;
-  PrimitiveConstructor(Data& data): data(data) {}
-  T operator()(Environment* /*environment*/) {return T(data);}
-};
-
-template <typename T, typename X0>
-struct PrimitiveConstructor<T (X0)> {
-  typedef typename T::Data Data;
-  Data& data;
-  int name0;
-  PrimitiveConstructor(Data& data, int name0): data(data), name0(name0) {}
-  T operator()(Environment* environment) {return T(data, Reference<X0>(environment, name0));}
-};
-
-int newName() {
-  static int nextName = 100;
-  return nextName++;
-}
-
-//------------------------------------------------------------------------------
-// Composite
-//------------------------------------------------------------------------------
+using std::map;
+using std::make_pair;
 
 //------------------------------------------------------------------------------
 // Value
 //------------------------------------------------------------------------------
 template <typename T>
 struct Value {
-  struct Data {
-    function<void (T)> set;
-    Data(function<void (T)> const& set): set(set) {}
+  struct Listener {
+    virtual void onChange(T) = 0;
   };
 
-  Data& data;
-
-  Value(Data& data): data(data) {}
+  map<void*, shared_ptr<Listener> > listeners;
 };
 
 template <typename T>
-shared_ptr<Object<Value<T>>> value(function<void (T)> const& set) {
-  typename Value<T>::Data data(set);
-  shared_ptr<Primitive<Value<T>>> object(new Primitive<Value<T>>(newName(),
-        function<Value<T> (Environment*)>(PrimitiveConstructor<Value<T> ()>(data))));
-  return object;
+struct FunctionValueListener : public Value<T>::Listener {
+  function<void (T)> onChangeHandler;
+  FunctionValueListener(function<void (T)> const& onChangeHandler):
+    onChangeHandler(onChangeHandler) {}
+  virtual void onChange(T value) {
+    this->onChangeHandler(value);
+  }
+};
+
+template <typename T>
+shared_ptr<Value<T>> value() {
+  shared_ptr<Value<T>> val(new Value<T>());
+  return val;
+}
+
+template <typename T>
+void addListener(shared_ptr<Value<T>> value,
+    void* object, shared_ptr<typename Value<T>::Listener> const& listener) {
+  value->listeners.insert(make_pair(object, listener));
+}
+
+template <typename T>
+void setValue(shared_ptr<Value<T>> valueObj, T value, void* objectToSkip) {
+  for (typename map<void*, shared_ptr<typename Value<T>::Listener>>::iterator pos = valueObj->listeners.begin(), end = valueObj->listeners.end(); pos != end; ++pos) {
+    void* object = (*pos).first;
+    shared_ptr<typename Value<T>::Listener> listener = (*pos).second;
+    if (object != objectToSkip) {
+      listener->onChange(value);
+    }
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -131,27 +70,27 @@ struct SpriteData {
   float position;
 };
 struct Sprite {
-  typedef SpriteData* Data;
-
-  Data data;
-  Reference<float> position;
-  Sprite(Data data, Reference<float> position): data(data), position(position) {}
+  Sprite(SpriteData* data): data(data) {}
+  SpriteData* data;
 };
 
-shared_ptr<Object<Sprite>> sprite(SpriteData* data, int positionName) {
-  shared_ptr<Primitive<Sprite>> object(new Primitive<Sprite>(newName(),
-        function<Sprite (Environment*)>(PrimitiveConstructor<Sprite (float)>(data, positionName))));
-  return object;
+void setSpritePosition(SpriteData* data, float position) {
+  data->position = position;
 }
 
-shared_ptr<Object<Value<float>>> spritePosition(SpriteData* data) {
-  function<void (float)> set();
-  return value(set);
+using namespace boost::lambda;
+shared_ptr<Sprite> sprite(SpriteData* data, shared_ptr<Value<float>> position) {
+  shared_ptr<Sprite> spr(new Sprite(data));
+  shared_ptr<FunctionValueListener<float>> listener(
+      new FunctionValueListener<float>(
+        function<void (float)>(bind(&setSpritePosition, data, _1))));
+  addListener(position, spr.get(), listener);
+  return spr;
 }
 
-void renderSprite(Sprite& sprite)
+void render(shared_ptr<Sprite> sprite)
 {
-  SpriteData* spriteData = sprite.data;
+  SpriteData* spriteData = sprite->data;
 
   glLoadIdentity();
 
@@ -166,10 +105,6 @@ void renderSprite(Sprite& sprite)
   glVertex3f(-1.0f, -1.0f, 0.0f);
   glEnd();
 }
-
-//------------------------------------------------------------------------------
-// Time
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 // GL
@@ -242,22 +177,18 @@ int main() {
 
   InitGL(640, 480);
 
+  shared_ptr<Value<float>> position = value<float>();
   SpriteData spriteData;
-  shared_ptr<Object<Sprite>> spriteObject = sprite(&spriteData, 0);
-  //SpriteData sprite_;
-  //Relation<Float, Sprite> sprite_rel = sprite(&sprite_);
-  //Float pos = sprite_rel.input;
-  //Sprite sprite = apply(sprite_rel, Float());
+  shared_ptr<Sprite> spr = sprite(&spriteData, position);
 
   Clock clock;
   while (running) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    spriteObject->applyReferenceVisitor(0, spriteObject->getName(), FunctionReferenceVisitor<void, Sprite>(bind(&renderSprite, _1)));
+    setValue(position, 0.001f * float(clock.get()), 0);
 
-    //set(pos, clock.get() * 0.001f);
-    //renderSprite(sprite);
+    render(spr);
 
     glfwSwapBuffers();
     running =
