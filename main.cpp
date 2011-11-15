@@ -53,8 +53,8 @@ void addListener(shared_ptr<Value<T>> value,
 }
 
 template <typename T>
-void setValue(shared_ptr<Value<T>> valueObj, T value, void* objectToSkip) {
-  for (typename map<void*, shared_ptr<typename Value<T>::Listener>>::iterator pos = valueObj->listeners.begin(), end = valueObj->listeners.end(); pos != end; ++pos) {
+void setValue(Value<T>& valueObj, T value, void* objectToSkip) {
+  for (typename map<void*, shared_ptr<typename Value<T>::Listener>>::iterator pos = valueObj.listeners.begin(), end = valueObj.listeners.end(); pos != end; ++pos) {
     void* object = (*pos).first;
     shared_ptr<typename Value<T>::Listener> listener = (*pos).second;
     if (object != objectToSkip) {
@@ -67,7 +67,7 @@ void setValue(shared_ptr<Value<T>> valueObj, T value, void* objectToSkip) {
 // Sin
 //------------------------------------------------------------------------------
 struct SineValue;
-void setSineValue(SineValue* v, float x) {setValue(shared_ptr<Value<float>>(v), std::sin(x), v);}
+void setSineValue(SineValue* v, float x);
 struct SineValue : public Value<float> {
   SineValue(shared_ptr<Value<float>> const& argument):
     argument(argument)
@@ -84,6 +84,7 @@ struct SineValue : public Value<float> {
 
   shared_ptr<Value<float>> argument;
 };
+void setSineValue(SineValue* v, float x) {setValue(*v, std::sin(x), v);}
 
 shared_ptr<Value<float>> sin(shared_ptr<Value<float>> const& argument) {
   shared_ptr<Value<float>> result(new SineValue(argument));
@@ -98,8 +99,10 @@ struct SpriteData {
   float position;
 };
 struct Sprite {
-  Sprite(SpriteData* data): data(data) {}
+  Sprite(SpriteData* data, shared_ptr<Value<float>> position)
+    : data(data), position(position) {}
   SpriteData* data;
+  shared_ptr<Value<float>> position;
 };
 
 void setSpritePosition(SpriteData* data, float position) {
@@ -108,7 +111,7 @@ void setSpritePosition(SpriteData* data, float position) {
 
 using namespace boost::lambda;
 shared_ptr<Sprite> sprite(SpriteData* data, shared_ptr<Value<float>> position) {
-  shared_ptr<Sprite> spr(new Sprite(data));
+  shared_ptr<Sprite> spr(new Sprite(data, position));
   shared_ptr<FunctionValueListener<float>> listener(
       new FunctionValueListener<float>(
         function<void (float)>(bind(&setSpritePosition, data, _1))));
@@ -214,7 +217,7 @@ int main() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    setValue(position, 0.001f * float(clock.get()), 0);
+    setValue(*position, 0.001f * float(clock.get()), 0);
 
     render(spr);
 
