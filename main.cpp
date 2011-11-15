@@ -8,6 +8,7 @@
 #include <boost/lambda/bind.hpp>
 #include <sys/time.h>
 #include <map>
+#include <cmath>
 
 using boost::function;
 using boost::shared_ptr;
@@ -60,6 +61,33 @@ void setValue(shared_ptr<Value<T>> valueObj, T value, void* objectToSkip) {
       listener->onChange(value);
     }
   }
+}
+
+//------------------------------------------------------------------------------
+// Sin
+//------------------------------------------------------------------------------
+struct SineValue;
+void setSineValue(SineValue* v, float x) {setValue(shared_ptr<Value<float>>(v), std::sin(x), v);}
+struct SineValue : public Value<float> {
+  SineValue(shared_ptr<Value<float>> const& argument):
+    argument(argument)
+  {
+    using namespace boost::lambda;
+
+    // TODO: Check whether bind() creates a shared_ptr to the argument - if so, this could cause a
+    // circular dependency.
+    shared_ptr<FunctionValueListener<float>> listener(
+        new FunctionValueListener<float>(
+          function<void (float)>(bind(&setSineValue, this, _1))));
+    addListener(argument, this, listener);
+  }
+
+  shared_ptr<Value<float>> argument;
+};
+
+shared_ptr<Value<float>> sin(shared_ptr<Value<float>> const& argument) {
+  shared_ptr<Value<float>> result(new SineValue(argument));
+  return result;
 }
 
 //------------------------------------------------------------------------------
@@ -179,7 +207,7 @@ int main() {
 
   shared_ptr<Value<float>> position = value<float>();
   SpriteData spriteData;
-  shared_ptr<Sprite> spr = sprite(&spriteData, position);
+  shared_ptr<Sprite> spr = sprite(&spriteData, sin(position));
 
   Clock clock;
   while (running) {
