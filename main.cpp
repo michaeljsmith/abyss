@@ -209,8 +209,10 @@ int main() {
   InitGL(640, 480);
 
   shared_ptr<Value<float>> position = value<float>();
-  SpriteData spriteData;
-  shared_ptr<Sprite> spr = sprite(&spriteData, sin(position));
+  SpriteData spriteData1;
+  shared_ptr<Sprite> spr1 = sprite(&spriteData1, position);
+  SpriteData spriteData2;
+  shared_ptr<Sprite> spr2 = sprite(&spriteData2, sin(position));
 
   Clock clock;
   while (running) {
@@ -219,7 +221,8 @@ int main() {
 
     setValue(*position, 0.001f * float(clock.get()), 0);
 
-    render(spr);
+    render(spr1);
+    render(spr2);
 
     glfwSwapBuffers();
     running =
