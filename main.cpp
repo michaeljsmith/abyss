@@ -64,6 +64,29 @@ void setValue(Value<T>& valueObj, T value, void* objectToSkip) {
 }
 
 //------------------------------------------------------------------------------
+// Pair
+//------------------------------------------------------------------------------
+template <typename T0, typename T1>
+struct Pair {
+  struct Listener {
+    virtual void onChanged0(function<void (T0)> const& fn) = 0;
+    virtual void onChanged1(function<void (T1)> const& fn) = 0;
+  };
+
+  Pair(shared_ptr<T0> const& x0, shared_ptr<T1> const& x1): x0(x0), x1(x1) {
+  }
+
+  map<void*, shared_ptr<Listener> > listeners;
+  shared_ptr<T0> x0;
+  shared_ptr<T1> x1;
+};
+
+template <typename T0, typename T1>
+struct PairFirst : public Value<float> {
+  shared_ptr<Pair<T0, T1>> pair;
+};
+
+//------------------------------------------------------------------------------
 // Sin
 //------------------------------------------------------------------------------
 struct SineValue;
@@ -74,8 +97,6 @@ struct SineValue : public Value<float> {
   {
     using namespace boost::lambda;
 
-    // TODO: Check whether bind() creates a shared_ptr to the argument - if so, this could cause a
-    // circular dependency.
     shared_ptr<FunctionValueListener<float>> listener(
         new FunctionValueListener<float>(
           function<void (float)>(bind(&setSineValue, this, _1))));
