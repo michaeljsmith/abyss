@@ -199,7 +199,7 @@ int main() {
   if (!glfwInit())
     exit( EXIT_FAILURE );
 
-  glfwSetWindowSizeCallback( ReSizeGLScene );
+  glfwSetWindowSizeCallback(ReSizeGLScene);
 
   if (!glfwOpenWindow(300, 300, 0, 0, 0, 0, 32, 0, GLFW_WINDOW)) {
     glfwTerminate();
