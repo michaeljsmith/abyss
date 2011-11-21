@@ -22,21 +22,24 @@ using std::make_pair;
 // Value
 //------------------------------------------------------------------------------
 template <typename T>
-struct Value {
-  struct Listener {
-    virtual void onChange(T) = 0;
-  };
-
-  map<void*, shared_ptr<Listener> > listeners;
+struct Listener {
+  virtual void onApply(function<void (T&)> const& fn) = 0;
 };
 
 template <typename T>
-struct FunctionValueListener : public Value<T>::Listener {
-  function<void (T)> onChangeHandler;
-  FunctionValueListener(function<void (T)> const& onChangeHandler):
-    onChangeHandler(onChangeHandler) {}
-  virtual void onChange(T value) {
-    this->onChangeHandler(value);
+struct Value {
+  map<void const*, shared_ptr<Listener<T>>> listeners;
+};
+
+template <typename T>
+struct FunctionListener : public Listener<T> {
+  function<void (function<void (T&)> const&)> onApplyHandler;
+
+  FunctionListener(function<void (function<void (T&)> const&)> const& onApplyHandler):
+    onApplyHandler(onApplyHandler) {}
+
+  virtual void onApply(function<void (T&)> const& fn) {
+    this->onApplyHandler(fn);
   }
 };
 
@@ -47,18 +50,20 @@ shared_ptr<Value<T>> value() {
 }
 
 template <typename T>
-void addListener(shared_ptr<Value<T>> value,
-    void* object, shared_ptr<typename Value<T>::Listener> const& listener) {
-  value->listeners.insert(make_pair(object, listener));
+void addListener(Value<T>& value, void const* object, shared_ptr<Listener<T>> listener) {
+  value.listeners.insert(make_pair(object, listener));
 }
 
 template <typename T>
 void setValue(Value<T>& valueObj, T value, void* objectToSkip) {
-  for (typename map<void*, shared_ptr<typename Value<T>::Listener>>::iterator pos = valueObj.listeners.begin(), end = valueObj.listeners.end(); pos != end; ++pos) {
-    void* object = (*pos).first;
-    shared_ptr<typename Value<T>::Listener> listener = (*pos).second;
+  using namespace boost::lambda;
+
+  function<void (T&)> setter(_1 = value);
+  for (typename map<void const*, shared_ptr<Listener<T>>>::iterator pos = valueObj.listeners.begin(), end = valueObj.listeners.end(); pos != end; ++pos) {
+    void const* object = (*pos).first;
+    shared_ptr<Listener<T>> listener = (*pos).second;
     if (object != objectToSkip) {
-      listener->onChange(value);
+      listener->onApply(setter);
     }
   }
 }
@@ -76,7 +81,7 @@ struct Pair {
   Pair(shared_ptr<T0> const& x0, shared_ptr<T1> const& x1): x0(x0), x1(x1) {
   }
 
-  map<void*, shared_ptr<Listener> > listeners;
+  map<void const*, shared_ptr<Listener> > listeners;
   shared_ptr<T0> x0;
   shared_ptr<T1> x1;
 };
@@ -90,22 +95,26 @@ struct PairFirst : public Value<float> {
 // Sin
 //------------------------------------------------------------------------------
 struct SineValue;
-void setSineValue(SineValue* v, float x);
+void applyToSine(SineValue* v, function<void (float&)> fn);
 struct SineValue : public Value<float> {
-  SineValue(shared_ptr<Value<float>> const& argument):
+  SineValue(shared_ptr<Value<float>> argument):
     argument(argument)
   {
     using namespace boost::lambda;
 
-    shared_ptr<FunctionValueListener<float>> listener(
-        new FunctionValueListener<float>(
-          function<void (float)>(bind(&setSineValue, this, _1))));
-    addListener(argument, this, listener);
+    shared_ptr<Listener<float>> listener(
+        new FunctionListener<float>(
+          function<void (function<void (float&)> const&)>(bind(&applyToSine, this, _1))));
+    addListener(*argument, this, listener);
   }
 
   shared_ptr<Value<float>> argument;
 };
-void setSineValue(SineValue* v, float x) {setValue(*v, std::sin(x), v);}
+void applyToSine(SineValue* v, function<void (float&)> fn) {
+  float x = 0.0f;
+  fn(x);
+  setValue(*v, std::sin(x), v);
+}
 
 shared_ptr<Value<float>> sin(shared_ptr<Value<float>> const& argument) {
   shared_ptr<Value<float>> result(new SineValue(argument));
@@ -126,17 +135,19 @@ struct Sprite {
   shared_ptr<Value<float>> position;
 };
 
-void setSpritePosition(SpriteData* data, float position) {
-  data->position = position;
+void applyToSpritePosition(SpriteData* data, function<void (float&)> fn) {
+  float x(0.0f);
+  fn(x);
+  data->position = x;
 }
 
 using namespace boost::lambda;
 shared_ptr<Sprite> sprite(SpriteData* data, shared_ptr<Value<float>> position) {
   shared_ptr<Sprite> spr(new Sprite(data, position));
-  shared_ptr<FunctionValueListener<float>> listener(
-      new FunctionValueListener<float>(
-        function<void (float)>(bind(&setSpritePosition, data, _1))));
-  addListener(position, spr.get(), listener);
+  shared_ptr<Listener<float>> listener(
+      new FunctionListener<float>(
+        function<void (function<void (float&)> const&)>(bind(&applyToSpritePosition, data, _1))));
+  addListener(*position, spr.get(), listener);
   return spr;
 }
 
