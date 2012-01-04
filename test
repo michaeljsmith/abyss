@@ -1,0 +1,25 @@
+grep chicken
+***
+chicken
+***
+chicken
+***
+0
+===
+
+grep chicken2
+***
+chicken
+***
+***
+1
+===
+
+grep "chick.*$"
+***
+chicken
+***
+chicken
+***
+0
+===
