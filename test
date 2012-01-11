@@ -232,7 +232,7 @@ with -4 x:
 
 ./jest
 ***
-"blue" ++ "green"
+"blue" + "green"
 ***
 "bluegreen"
 ***
@@ -241,7 +241,7 @@ with -4 x:
 
 ./jest
 ***
-with "blue" color: "green" ++ color
+with "blue" color: "green" + color
 ***
 "greenblue"
 ***
@@ -251,7 +251,7 @@ with "blue" color: "green" ++ color
 ./jest
 ***
 with 3 number:
-  "green" ++ fmt number
+  "green" + fmt number
 ***
 "green3"
 ***
@@ -261,11 +261,24 @@ with 3 number:
 ./jest
 ***
 with 3 number:
-  "green" ++ number
+  "green" + number
 ***
-<stdin>(2): error: cannot be applied to arguments: __builtin.op_concat
+<stdin>(2): error: cannot be applied to arguments: __builtin.op_add
 ***
 1
+===
+
+./jest
+***
+with 2 number1:
+with 3 number2:
+  "green" +
+  fmt number1 +
+  fmt number2
+***
+"green23"
+***
+0
 ===
 
 ./jest
@@ -274,8 +287,7 @@ foo x =
   "result"
 foo
 ***
-<function object "foo"
-  [x]>
+<function object "foo">
 ***
 0
 ===
@@ -283,7 +295,7 @@ foo
 ./jest
 ***
 foo x =
-  "result" ++ x
+  "result" + x
 foo "2"
 ***
 "result2"
@@ -304,7 +316,7 @@ bar
 ./jest
 ***
 foo y x =
-  x ++
+  x +
     y
 foo "a"
   fmt 2
