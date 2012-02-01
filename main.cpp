@@ -2,5 +2,5 @@
 
 int main() {
   printf("3\n");
-	return 0;
+  return 0;
 }
