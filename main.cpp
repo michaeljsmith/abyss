@@ -79,6 +79,17 @@ void* cdr(void* p) {
   return ((Cell*)data)->tail;
 }
 
+void* reverse_helper(void* prev, void* tail) {
+  if (tail == 0) {
+    return prev;
+  } else {
+    return reverse_helper(cons(car(tail), prev), cdr(tail));
+  }
+}
+void* reverse(void* list) {
+  return reverse_helper(0, list);
+}
+
 void* pop_arg(void*& ls) {
   ASSERT(consp(ls));
   void* x = car(ls);
@@ -106,6 +117,58 @@ void* pop_symbol(void*& ls) {
   return x;
 }
 
+struct ExecutionContext {
+  ExecutionContext(std::map<void*, void*>& functions):
+    functions(functions), nextTmpIdx(1) {}
+
+  std::map<void*, void*>& functions;
+  std::map<void*, void*> bindings;
+  int nextTmpIdx;
+};
+
+char exe_type_int[10] = "type_int";
+char exe_type_ptr[10] = "type_ptr";
+
+size_t value_size(void* type) {
+  size_t size;
+  if (type == exe_type_int) {
+    size = sizeof(int);
+  } else if (type == exe_type_ptr) {
+    size = sizeof(void*);
+  } else {
+    ASSERT(0);
+    size = 0;
+  }
+
+  return size;
+}
+
+void* alloc_value(void* type) {
+  return new char[value_size(type)];
+}
+
+void destroy_value(void* /*type*/, void* value) {
+  delete [] (char*) value;
+}
+
+void* copy_value(void* type, void* value) {
+  void* new_value = alloc_value(type);
+  memcpy(new_value, value, value_size(type));
+  return new_value;
+}
+
+void add_binding(ExecutionContext& ctx, void* parm_name, void* value) {
+  ctx.bindings.insert(std::make_pair(parm_name, value));
+}
+
+void* pop_binding(ExecutionContext& ctx, void* parm_name) {
+  std::map<void*, void*>::iterator value_pos = ctx.bindings.find(parm_name);
+  ASSERT(value_pos != ctx.bindings.end());
+  void* value = (*value_pos).second;
+  ctx.bindings.erase(value_pos);
+  return value;
+}
+
 void load_functions(std::map<void*, void*>& functions, void* code) {
   void* module = code;
   while (module != 0) {
@@ -119,18 +182,8 @@ void load_functions(std::map<void*, void*>& functions, void* code) {
   }
 }
 
-struct ExecutionContext {
-  ExecutionContext(std::map<void*, void*>& functions):
-    functions(functions), nextTmpIdx(1) {}
-
-  std::map<void*, void*>& functions;
-  std::map<void*, void*> bindings;
-  int nextTmpIdx;
-};
-
-void execute_expression(ExecutionContext& ctx, void* statement) {
-  ASSERT(consp(statement));
-}
+void* expression_type(ExecutionContext& ctx, void* expression);
+void execute_expression(ExecutionContext& ctx, void* dest, void* expression);
 
 void execute_statements(ExecutionContext& ctx, void* statements) {
   void* remaining_statements = statements;
@@ -138,43 +191,11 @@ void execute_statements(ExecutionContext& ctx, void* statements) {
     void* statement = pop_arg(remaining_statements);
 
     // TODO: check special statements.
-    execute_expression(ctx, statement);
+    void* type = expression_type(ctx, statement);
+    void* result = alloc_value(type);
+    execute_expression(ctx, result, statement);
+    destroy_value(type, result);
   }
-}
-
-char exe_type_int[10] = "type_int";
-char exe_type_ptr[10] = "type_ptr";
-
-void* copy_value(void* parm_type, void* value) {
-  size_t size;
-  if (parm_type == exe_type_int) {
-    size = sizeof(int);
-  } else if (parm_type == exe_type_ptr) {
-    size = sizeof(void*);
-  } else {
-    ASSERT(0);
-    size = 0;
-  }
-
-  void* new_value = new char[size];
-  memcpy(new_value, value, size);
-  return new_value;
-}
-
-void destroy_value(void* /*parm_type*/, void* value) {
-  delete [] (char*) value;
-}
-
-void add_binding(ExecutionContext& ctx, void* parm_name, void* value) {
-  ctx.bindings.insert(std::make_pair(parm_name, value));
-}
-
-void* pop_binding(ExecutionContext& ctx, void* parm_name) {
-  std::map<void*, void*>::iterator value_pos = ctx.bindings.find(parm_name);
-  ASSERT(value_pos != ctx.bindings.end());
-  void* value = (*value_pos).second;
-  ctx.bindings.erase(value_pos);
-  return value;
 }
 
 void execute_function(std::map<void*, void*>& functions, void* fn_name, void* args) {
@@ -214,6 +235,28 @@ void execute_function(std::map<void*, void*>& functions, void* fn_name, void* ar
   }
 
   ASSERT(ctx.bindings.empty());
+}
+
+void execute_function_args(ExecutionContext& ctx, void* fn_name,
+    void* prev_args, void* arg_expressions) {
+  if (arg_expressions == 0) {
+    execute_function(ctx.functions, fn_name, reverse(prev_args));
+  } else {
+    void* arg_expression = car(arg_expressions);
+    void* arg_type = expression_type(ctx, arg_expression);
+    void* result = alloc_value(arg_type);
+    execute_expression(ctx, result, arg_expression);
+    execute_function_args(ctx, fn_name, cons(result, prev_args),
+        cdr(arg_expressions));
+    destroy_value(arg_type, result);
+  }
+}
+
+void* expression_type(ExecutionContext& ctx, void* expression) {
+}
+
+void execute_expression(ExecutionContext& ctx, void* dest, void* expression) {
+  ASSERT(consp(expression));
 }
 
 void execute(void* code) {
