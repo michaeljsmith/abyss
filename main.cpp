@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <ffi/ffi.h>
+#include <string.h>
+#include <ffi.h>
 #include <map>
 #include <set>
 #include <string>
@@ -118,6 +119,64 @@ void load_functions(std::map<void*, void*>& functions, void* code) {
   }
 }
 
+struct ExecutionContext {
+  ExecutionContext(std::map<void*, void*>& functions):
+    functions(functions), nextTmpIdx(1) {}
+
+  std::map<void*, void*>& functions;
+  std::map<void*, void*> bindings;
+  int nextTmpIdx;
+};
+
+void execute_expression(ExecutionContext& ctx, void* statement) {
+  ASSERT(consp(statement));
+}
+
+void execute_statements(ExecutionContext& ctx, void* statements) {
+  void* remaining_statements = statements;
+  while (remaining_statements != 0) {
+    void* statement = pop_arg(remaining_statements);
+
+    // TODO: check special statements.
+    execute_expression(ctx, statement);
+  }
+}
+
+char exe_type_int[10] = "type_int";
+char exe_type_ptr[10] = "type_ptr";
+
+void* copy_value(void* parm_type, void* value) {
+  size_t size;
+  if (parm_type == exe_type_int) {
+    size = sizeof(int);
+  } else if (parm_type == exe_type_ptr) {
+    size = sizeof(void*);
+  } else {
+    ASSERT(0);
+    size = 0;
+  }
+
+  void* new_value = new char[size];
+  memcpy(new_value, value, size);
+  return new_value;
+}
+
+void destroy_value(void* /*parm_type*/, void* value) {
+  delete [] (char*) value;
+}
+
+void add_binding(ExecutionContext& ctx, void* parm_name, void* value) {
+  ctx.bindings.insert(std::make_pair(parm_name, value));
+}
+
+void* pop_binding(ExecutionContext& ctx, void* parm_name) {
+  std::map<void*, void*>::iterator value_pos = ctx.bindings.find(parm_name);
+  ASSERT(value_pos != ctx.bindings.end());
+  void* value = (*value_pos).second;
+  ctx.bindings.erase(value_pos);
+  return value;
+}
+
 void execute_function(std::map<void*, void*>& functions, void* fn_name, void* args) {
   std::map<void*, void*>::iterator function_pos = functions.find(fn_name);
   ASSERT(function_pos != functions.end());
@@ -125,12 +184,36 @@ void execute_function(std::map<void*, void*>& functions, void* fn_name, void* ar
   void* parms = pop_cons(fn);
   void* code = pop_cons(fn);
 
-  std::map<void*, void*> bindings;
-  while (parms != 0) {
-    void* parm_name = pop_symbol(parms);
+  ExecutionContext ctx(functions);
+  void* remaining_parms = parms;
+  while (remaining_parms != 0) {
+    void* parm = pop_symbol(remaining_parms);
+    void* parm_name = pop_symbol(parm);
+    void* parm_type = pop_symbol(parm);
+    ASSERT(parm == 0);
+
     void* arg = pop_arg(args);
+
+    add_binding(ctx, parm_name, copy_value(parm_type, arg));
   }
   ASSERT(args == 0);
+
+  execute_statements(ctx, code);
+
+  // Clean up args.
+  // TODO: Remove in reverse order.
+  remaining_parms = parms;
+  while (remaining_parms != 0) {
+    void* parm = pop_symbol(remaining_parms);
+    void* parm_name = pop_symbol(parm);
+    void* parm_type = pop_symbol(parm);
+    ASSERT(parm == 0);
+
+    void* arg = pop_binding(ctx, parm_name);
+    destroy_value(parm_type, arg);
+  }
+
+  ASSERT(ctx.bindings.empty());
 }
 
 void execute(void* code) {
