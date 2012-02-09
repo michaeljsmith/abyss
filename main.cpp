@@ -79,6 +79,22 @@ void* cdr(void* p) {
   return ((Cell*)data)->tail;
 }
 
+void* list() {
+  return 0;
+}
+
+void* list(void* x0) {
+  return cons(x0, list());
+}
+
+void* list(void* x0, void* x1) {
+  return cons(x0, list(x1));
+}
+
+void* list(void* x0, void* x1, void* x2) {
+  return cons(x0, list(x1, x2));
+}
+
 void* reverse_helper(void* prev, void* tail) {
   if (tail == 0) {
     return prev;
@@ -118,11 +134,12 @@ void* pop_symbol(void*& ls) {
 }
 
 struct ExecutionContext {
-  ExecutionContext(std::map<void*, void*>& functions):
-    functions(functions), nextTmpIdx(1) {}
+  ExecutionContext(std::map<void*, void*>& functions, void* dest):
+    functions(functions), dest(dest), nextTmpIdx(1) {}
 
   std::map<void*, void*>& functions;
-  std::map<void*, void*> bindings;
+  void* dest;
+  std::map<void*, std::pair<void*, void*> > bindings;
   int nextTmpIdx;
 };
 
@@ -157,14 +174,66 @@ void* copy_value(void* type, void* value) {
   return new_value;
 }
 
-void add_binding(ExecutionContext& ctx, void* parm_name, void* value) {
-  ctx.bindings.insert(std::make_pair(parm_name, value));
+struct ValueStackEntry {
+  ValueStackEntry(): buffer(0), type(0), value(0) {}
+  ~ValueStackEntry() {
+    if (buffer != 0) {
+      ASSERT(this->type != 0);
+      destroy_value(this->type, this->buffer);
+    }
+  }
+
+  void* buffer;
+  void* type;
+  void* value;
+};
+
+void set_value_stack_entry_reference(ValueStackEntry& dest, void* type, void* value) {
+  ASSERT(dest.buffer == 0);
+  ASSERT(dest.type == 0);
+  ASSERT(dest.value == 0);
+  dest.type = type;
+  dest.value = value;
+  ASSERT(dest.type != 0);
+  ASSERT(dest.value != 0);
 }
 
-void* pop_binding(ExecutionContext& ctx, void* parm_name) {
-  std::map<void*, void*>::iterator value_pos = ctx.bindings.find(parm_name);
+void allocate_value_stack_entry(ValueStackEntry& dest, void* type) {
+  ASSERT(dest.buffer == 0);
+  ASSERT(dest.type == 0);
+  ASSERT(dest.value == 0);
+  dest.value = dest.buffer = alloc_value(type);
+  dest.type = type;
+  ASSERT(dest.type != 0);
+  ASSERT(dest.value != 0);
+}
+
+void add_binding(ExecutionContext& ctx, void* type, void* name, void* value) {
+  ctx.bindings.insert(
+      std::make_pair(name, std::make_pair(type, value)));
+}
+
+void* get_binding_type(ExecutionContext& ctx, void* name) {
+  std::map<void*, std::pair<void*, void*> >::iterator value_pos =
+    ctx.bindings.find(name);
   ASSERT(value_pos != ctx.bindings.end());
-  void* value = (*value_pos).second;
+  return (*value_pos).second.first;
+}
+
+std::pair<void*, void*> get_binding(ExecutionContext& ctx, void* name) {
+  std::map<void*, std::pair<void*, void*> >::iterator value_pos =
+    ctx.bindings.find(name);
+  ASSERT(value_pos != ctx.bindings.end());
+  return (*value_pos).second;
+}
+
+void* pop_binding(ExecutionContext& ctx, void* type, void* name) {
+  std::map<void*, std::pair<void*, void*> >::iterator value_pos =
+    ctx.bindings.find(name);
+  ASSERT(value_pos != ctx.bindings.end());
+  void* actual_type = (*value_pos).second.first;
+  ASSERT(actual_type == type); 
+  void* value = (*value_pos).second.second;
   ctx.bindings.erase(value_pos);
   return value;
 }
@@ -174,16 +243,22 @@ void load_functions(std::map<void*, void*>& functions, void* code) {
   while (module != 0) {
     void* fundef = pop_cons(module);
     void* name = pop_symbol(fundef);
+    void* type = pop_symbol(fundef);
     void* parms = pop_cons(fundef);
     void* code = pop_cons(fundef);
     ASSERT(fundef == 0);
 
-    functions.insert(std::make_pair(name, cons(parms, code)));
+    functions.insert(std::make_pair(name, list(type, parms, code)));
   }
 }
 
-void* expression_type(ExecutionContext& ctx, void* expression);
-void execute_expression(ExecutionContext& ctx, void* dest, void* expression);
+void* get_function(ExecutionContext& ctx, void* fn_name) {
+  std::map<void*, void*>::iterator function_pos = ctx.functions.find(fn_name);
+  ASSERT(function_pos != ctx.functions.end());
+  return (*function_pos).second;
+}
+
+void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expression);
 
 void execute_statements(ExecutionContext& ctx, void* statements) {
   void* remaining_statements = statements;
@@ -191,21 +266,21 @@ void execute_statements(ExecutionContext& ctx, void* statements) {
     void* statement = pop_arg(remaining_statements);
 
     // TODO: check special statements.
-    void* type = expression_type(ctx, statement);
-    void* result = alloc_value(type);
-    execute_expression(ctx, result, statement);
-    destroy_value(type, result);
+    ValueStackEntry value_entry;
+    execute_expression(ctx, value_entry, statement);
   }
 }
 
-void execute_function(std::map<void*, void*>& functions, void* fn_name, void* args) {
+void execute_function(std::map<void*, void*>& functions, void* fn_name, void* dest, void* args) {
   std::map<void*, void*>::iterator function_pos = functions.find(fn_name);
   ASSERT(function_pos != functions.end());
   void* fn = (*function_pos).second;
+  /*void* type =*/ pop_cons(fn);
   void* parms = pop_cons(fn);
   void* code = pop_cons(fn);
+  ASSERT(fn == 0);
 
-  ExecutionContext ctx(functions);
+  ExecutionContext ctx(functions, dest);
   void* remaining_parms = parms;
   while (remaining_parms != 0) {
     void* parm = pop_symbol(remaining_parms);
@@ -215,7 +290,7 @@ void execute_function(std::map<void*, void*>& functions, void* fn_name, void* ar
 
     void* arg = pop_arg(args);
 
-    add_binding(ctx, parm_name, copy_value(parm_type, arg));
+    add_binding(ctx, parm_type, parm_name, copy_value(parm_type, arg));
   }
   ASSERT(args == 0);
 
@@ -230,40 +305,50 @@ void execute_function(std::map<void*, void*>& functions, void* fn_name, void* ar
     void* parm_type = pop_symbol(parm);
     ASSERT(parm == 0);
 
-    void* arg = pop_binding(ctx, parm_name);
+    void* arg = pop_binding(ctx, parm_type, parm_name);
     destroy_value(parm_type, arg);
   }
 
   ASSERT(ctx.bindings.empty());
 }
 
-void execute_function_args(ExecutionContext& ctx, void* fn_name,
+void execute_function_args(ExecutionContext& ctx, void* fn_name, void* dest,
     void* prev_args, void* arg_expressions) {
   if (arg_expressions == 0) {
-    execute_function(ctx.functions, fn_name, reverse(prev_args));
+    execute_function(ctx.functions, fn_name, dest, reverse(prev_args));
   } else {
     void* arg_expression = car(arg_expressions);
-    void* arg_type = expression_type(ctx, arg_expression);
-    void* result = alloc_value(arg_type);
-    execute_expression(ctx, result, arg_expression);
-    execute_function_args(ctx, fn_name, cons(result, prev_args),
+    ValueStackEntry value_entry;
+    execute_expression(ctx, value_entry, arg_expression);
+    ASSERT(value_entry.value);
+    execute_function_args(ctx, fn_name, dest, cons(value_entry.value, prev_args),
         cdr(arg_expressions));
-    destroy_value(arg_type, result);
   }
 }
 
-void* expression_type(ExecutionContext& ctx, void* expression) {
-}
+void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expression) {
+  if (symbolp(expression)) {
+    std::pair<void*, void*> binding = get_binding(ctx, expression);
+    set_value_stack_entry_reference(dest, binding.first, binding.second);
+  } else if (consp(expression)) {
+    void* fn_name = car(expression);
+    void* fn = get_function(ctx, fn_name);
+    void* type = pop_cons(fn);
+    /*void* parms =*/ pop_cons(fn);
+    /*void* code =*/ pop_cons(fn);
+    ASSERT(fn == 0);
 
-void execute_expression(ExecutionContext& ctx, void* dest, void* expression) {
-  ASSERT(consp(expression));
+    allocate_value_stack_entry(dest, type);
+    execute_function_args(ctx, fn_name, dest.value, 0, cdr(expression));
+  }
 }
 
 void execute(void* code) {
   std::map<void*, void*> functions;
   load_functions(functions, code);
 
-  execute_function(functions, symbol("main"), 0);
+  int result;
+  execute_function(functions, symbol("main"), &result, 0);
 }
 
 int main() {
