@@ -5,6 +5,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 struct AssertRaiser {
   AssertRaiser(bool condition, char const* file, int line, char const* msg) {
@@ -271,7 +272,9 @@ void execute_statements(ExecutionContext& ctx, void* statements) {
   }
 }
 
-void execute_function(std::map<void*, void*>& functions, void* fn_name, void* dest, void* args) {
+void execute_function(
+    std::map<void*, void*>& functions, void* fn_name,
+    void* dest, std::vector<std::pair<void*, void*> >& args) {
   std::map<void*, void*>::iterator function_pos = functions.find(fn_name);
   ASSERT(function_pos != functions.end());
   void* fn = (*function_pos).second;
@@ -282,17 +285,21 @@ void execute_function(std::map<void*, void*>& functions, void* fn_name, void* de
 
   ExecutionContext ctx(functions, dest);
   void* remaining_parms = parms;
+  size_t arg_idx = 0;
   while (remaining_parms != 0) {
     void* parm = pop_symbol(remaining_parms);
     void* parm_name = pop_symbol(parm);
     void* parm_type = pop_symbol(parm);
     ASSERT(parm == 0);
 
-    void* arg = pop_arg(args);
+    ASSERT(arg_idx < args.size());
+    void* arg_type = args[arg_idx].first;
+    void* arg_value = args[arg_idx].second;
+    ASSERT(arg_type == parm_type);
 
-    add_binding(ctx, parm_type, parm_name, copy_value(parm_type, arg));
+    add_binding(ctx, parm_type, parm_name, copy_value(parm_type, arg_value));
   }
-  ASSERT(args == 0);
+  ASSERT(arg_idx == args.size());
 
   execute_statements(ctx, code);
 
@@ -313,15 +320,17 @@ void execute_function(std::map<void*, void*>& functions, void* fn_name, void* de
 }
 
 void execute_function_args(ExecutionContext& ctx, void* fn_name, void* dest,
-    void* prev_args, void* arg_expressions) {
+    std::vector<std::pair<void*, void*> >& prev_args, void* arg_expressions) {
   if (arg_expressions == 0) {
-    execute_function(ctx.functions, fn_name, dest, reverse(prev_args));
+    execute_function(ctx.functions, fn_name, dest, prev_args);
   } else {
     void* arg_expression = car(arg_expressions);
     ValueStackEntry value_entry;
     execute_expression(ctx, value_entry, arg_expression);
+    ASSERT(value_entry.type);
     ASSERT(value_entry.value);
-    execute_function_args(ctx, fn_name, dest, cons(value_entry.value, prev_args),
+    prev_args.push_back(std::make_pair(value_entry.type, value_entry.value));
+    execute_function_args(ctx, fn_name, dest, prev_args,
         cdr(arg_expressions));
   }
 }
@@ -339,7 +348,8 @@ void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expr
     ASSERT(fn == 0);
 
     allocate_value_stack_entry(dest, type);
-    execute_function_args(ctx, fn_name, dest.value, 0, cdr(expression));
+    std::vector<std::pair<void*, void*> > args;
+    execute_function_args(ctx, fn_name, dest.value, args, cdr(expression));
   }
 }
 
@@ -348,7 +358,8 @@ void execute(void* code) {
   load_functions(functions, code);
 
   int result;
-  execute_function(functions, symbol("main"), &result, 0);
+  std::vector<std::pair<void*, void*> > args;
+  execute_function(functions, symbol("main"), &result, args);
 }
 
 int main() {
