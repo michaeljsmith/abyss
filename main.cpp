@@ -147,6 +147,8 @@ struct ExecutionContext {
 char exe_type_int[10] = "type_int";
 char exe_type_ptr[10] = "type_ptr";
 
+char exe_statement_native[12] = "stmt_native";
+
 size_t value_size(void* type) {
   size_t size;
   if (type == exe_type_int) {
@@ -340,16 +342,26 @@ void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expr
     std::pair<void*, void*> binding = get_binding(ctx, expression);
     set_value_stack_entry_reference(dest, binding.first, binding.second);
   } else if (consp(expression)) {
-    void* fn_name = car(expression);
-    void* fn = get_function(ctx, fn_name);
-    void* type = pop_cons(fn);
-    /*void* parms =*/ pop_cons(fn);
-    /*void* code =*/ pop_cons(fn);
-    ASSERT(fn == 0);
+    void* header = pop_arg(expression);
 
-    allocate_value_stack_entry(dest, type);
-    std::vector<std::pair<void*, void*> > args;
-    execute_function_args(ctx, fn_name, dest.value, args, cdr(expression));
+    if (header == stmt_native) {
+      void* fn_expression = pop_arg(expression);
+      ValueStackEntry fn_dest;
+      execute_expression(ctx, fn_dest, expression);
+
+      What is the return type of the function
+    } else {
+      void* fn_name = header;
+      void* fn = get_function(ctx, fn_name);
+      void* type = pop_cons(fn);
+      /*void* parms =*/ pop_cons(fn);
+      /*void* code =*/ pop_cons(fn);
+      ASSERT(fn == 0);
+
+      allocate_value_stack_entry(dest, type);
+      std::vector<std::pair<void*, void*> > args;
+      execute_function_args(ctx, fn_name, dest.value, args, expression);
+    }
   }
 }
 
