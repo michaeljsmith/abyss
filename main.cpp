@@ -146,6 +146,28 @@ struct ExecutionContext {
 
 char exe_type_int[10] = "type_int";
 char exe_type_ptr[10] = "type_ptr";
+char exe_type_fnptr[10] = "type_ptr";
+
+bool fnptrp(void* type) {
+  if (!consp(type))
+    return false;
+
+  void* header = pop_arg(type);
+  if (header != exe_type_fnptr)
+    return false;
+
+  /*void* result_type =*/ pop_arg(type);
+  ASSERT(type == 0);
+  return true;
+}
+
+void* fnptr_res(void* type) {
+  ASSERT(fnptrp(type));
+  /*void* header =*/ pop_arg(type);
+  void* result_type = pop_arg(type);
+  ASSERT(type == 0);
+  return result_type;
+}
 
 char exe_statement_native[12] = "stmt_native";
 
@@ -155,6 +177,8 @@ size_t value_size(void* type) {
     size = sizeof(int);
   } else if (type == exe_type_ptr) {
     size = sizeof(void*);
+  } else if (fnptrp(type)) {
+    size = sizeof(void(*)());
   } else {
     ASSERT(0);
     size = 0;
@@ -337,6 +361,63 @@ void execute_function_args(ExecutionContext& ctx, void* fn_name, void* dest,
   }
 }
 
+ffi_type* ffi_type_of(void* type) {
+  ffi_type* ffi_tp;
+  if (type == exe_type_int) {
+    ffi_tp = &ffi_type_sint;
+  } else if (type == exe_type_ptr) {
+    ffi_tp = &ffi_type_pointer;
+  } else if (fnptrp(type)) {
+    ffi_tp = &ffi_type_pointer;
+  } else {
+    ASSERT(0);
+    ffi_tp = 0;
+  }
+
+  return ffi_tp;
+}
+
+void execute_native(void* result_type, void (*native_fn)(),
+    void* dest, std::vector<std::pair<void*, void*> >& args) {
+
+  std::vector<ffi_type*> arg_types(args.size());
+  std::vector<void*> arg_values(args.size());
+  for (size_t i = 0; i < args.size(); ++i) {
+    arg_types[i] = ffi_type_of(args[i].first);
+    arg_values[i] = args[i].second;
+  }
+
+  void* values[1];
+  char const* s;
+  values[0] = &s;
+
+  ffi_cif cif;
+  if (!ffi_prep_cif(&cif, FFI_DEFAULT_ABI, args.size(),
+        ffi_type_of(result_type), &arg_types[0]) == FFI_OK) {
+    ASSERT(0);
+    return;
+  }
+
+  ffi_call(&cif, native_fn, dest, &arg_values[0]);
+}
+
+void execute_native_args(
+    ExecutionContext& ctx, void* result_type, void(*native_fn)(), void* dest,
+    std::vector<std::pair<void*, void*> >& prev_args, void* arg_expressions) {
+  if (arg_expressions == 0) {
+    execute_native(result_type, native_fn, dest, prev_args);
+  } else {
+    void* arg_expression = car(arg_expressions);
+    ValueStackEntry value_entry;
+    execute_expression(ctx, value_entry, arg_expression);
+    ASSERT(value_entry.type);
+    ASSERT(value_entry.value);
+    prev_args.push_back(std::make_pair(value_entry.type, value_entry.value));
+    execute_native_args(ctx, result_type, native_fn, dest, prev_args,
+        cdr(arg_expressions));
+  }
+}
+
 void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expression) {
   if (symbolp(expression)) {
     std::pair<void*, void*> binding = get_binding(ctx, expression);
@@ -344,12 +425,17 @@ void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expr
   } else if (consp(expression)) {
     void* header = pop_arg(expression);
 
-    if (header == stmt_native) {
+    if (header == exe_statement_native) {
       void* fn_expression = pop_arg(expression);
       ValueStackEntry fn_dest;
-      execute_expression(ctx, fn_dest, expression);
+      execute_expression(ctx, fn_dest, fn_expression);
+      void (*native_fn)() = *(void (**)())&fn_dest.value;
 
-      What is the return type of the function
+      ASSERT(fnptrp(fn_dest.type));
+      void* result_type = fnptr_res(fn_dest.type);
+      allocate_value_stack_entry(dest, result_type);
+      std::vector<std::pair<void*, void*> > args;
+      execute_native_args(ctx, result_type, native_fn, fn_dest.value, args, expression);
     } else {
       void* fn_name = header;
       void* fn = get_function(ctx, fn_name);

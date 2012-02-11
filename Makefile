@@ -8,4 +8,4 @@ run: exe
 	./a.out
 
 $(EXE): main.cpp
-	g++ -o $(EXE) -lffi -Wall -Wextra -Werror main.cpp
+	g++ $(CXXFLAGS) -o $(EXE) -lffi -Wall -Wextra -Werror main.cpp
