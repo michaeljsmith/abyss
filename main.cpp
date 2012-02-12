@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <dlfcn.h>
 
 struct AssertRaiser {
   AssertRaiser(bool condition, char const* file, int line, char const* msg) {
@@ -134,6 +135,25 @@ void* pop_symbol(void*& ls) {
   return x;
 }
 
+char tag_string[10] = "string";
+
+void* str(char const* text) {
+  return make_cell(tag_string, intern(text));
+}
+
+bool strp(void* x) {return ((Cell*)x)->head == tag_string;}
+
+char* str_ptr(void* x) {
+  ASSERT(strp(x));
+  return (char*)((Cell*)x)->tail;
+}
+
+void* pop_string(void*& ls) {
+  void* x = pop_arg(ls);
+  ASSERT(strp(x));
+  return x;
+}
+
 struct ExecutionContext {
   ExecutionContext(std::map<void*, void*>& functions, void* dest):
     functions(functions), dest(dest), nextTmpIdx(1) {}
@@ -148,7 +168,11 @@ char exe_type_int[10] = "type_int";
 char exe_type_ptr[10] = "type_ptr";
 char exe_type_fnptr[10] = "type_ptr";
 
-bool fnptrp(void* type) {
+void* fnptr_t(void* type) {
+  return cons(exe_type_fnptr, type);
+}
+
+bool fnptr_tp(void* type) {
   if (!consp(type))
     return false;
 
@@ -161,8 +185,8 @@ bool fnptrp(void* type) {
   return true;
 }
 
-void* fnptr_res(void* type) {
-  ASSERT(fnptrp(type));
+void* fnptr_t_res(void* type) {
+  ASSERT(fnptr_tp(type));
   /*void* header =*/ pop_arg(type);
   void* result_type = pop_arg(type);
   ASSERT(type == 0);
@@ -170,6 +194,7 @@ void* fnptr_res(void* type) {
 }
 
 char exe_statement_native[12] = "stmt_native";
+char exe_statement_load_native[20] = "stmt_load_native";
 
 size_t value_size(void* type) {
   size_t size;
@@ -177,7 +202,7 @@ size_t value_size(void* type) {
     size = sizeof(int);
   } else if (type == exe_type_ptr) {
     size = sizeof(void*);
-  } else if (fnptrp(type)) {
+  } else if (fnptr_tp(type)) {
     size = sizeof(void(*)());
   } else {
     ASSERT(0);
@@ -367,7 +392,7 @@ ffi_type* ffi_type_of(void* type) {
     ffi_tp = &ffi_type_sint;
   } else if (type == exe_type_ptr) {
     ffi_tp = &ffi_type_pointer;
-  } else if (fnptrp(type)) {
+  } else if (fnptr_tp(type)) {
     ffi_tp = &ffi_type_pointer;
   } else {
     ASSERT(0);
@@ -425,14 +450,26 @@ void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expr
   } else if (consp(expression)) {
     void* header = pop_arg(expression);
 
-    if (header == exe_statement_native) {
+    if (header == exe_statement_load_native) {
+      void* result_type = pop_arg(expression);
+      void* library_name = pop_string(expression);
+      void* symbol_name = pop_string(expression);
+      ASSERT(expression == 0);
+
+      void* lib_handle = dlopen(str_ptr(library_name), RTLD_LAZY);
+      ASSERT(lib_handle);
+      void(*fn_ptr)() = (void (*)())dlsym(lib_handle, str_ptr(symbol_name));
+
+      allocate_value_stack_entry(dest, fnptr_t(result_type));
+      *(void(**)())dest.value = fn_ptr;
+    } else if (header == exe_statement_native) {
       void* fn_expression = pop_arg(expression);
       ValueStackEntry fn_dest;
       execute_expression(ctx, fn_dest, fn_expression);
       void (*native_fn)() = *(void (**)())&fn_dest.value;
 
-      ASSERT(fnptrp(fn_dest.type));
-      void* result_type = fnptr_res(fn_dest.type);
+      ASSERT(fnptr_tp(fn_dest.type));
+      void* result_type = fnptr_t_res(fn_dest.type);
       allocate_value_stack_entry(dest, result_type);
       std::vector<std::pair<void*, void*> > args;
       execute_native_args(ctx, result_type, native_fn, fn_dest.value, args, expression);
