@@ -166,7 +166,7 @@ struct ExecutionContext {
 
 char exe_type_int[10] = "type_int";
 char exe_type_ptr[10] = "type_ptr";
-char exe_type_fnptr[10] = "type_ptr";
+char exe_type_fnptr[14] = "type_fnptr";
 
 void* fnptr_t(void* type) {
   return cons(exe_type_fnptr, type);
@@ -488,13 +488,14 @@ void execute_expression(ExecutionContext& ctx, ValueStackEntry& dest, void* expr
   }
 }
 
-void execute(void* code) {
+int execute(void* code) {
   std::map<void*, void*> functions;
   load_functions(functions, code);
 
   int result;
   std::vector<std::pair<void*, void*> > args;
   execute_function(functions, symbol("main"), &result, args);
+  return result;
 }
 
 int main() {
